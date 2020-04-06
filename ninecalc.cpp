@@ -14,8 +14,25 @@ typedef unsigned short 	u16;
 typedef unsigned int 	u32;
 typedef unsigned long 	u64;
 
+typedef float 			f32;
+typedef double			f64;
+
 typedef i32 			bool32;
 typedef i64 			bool64;
+
+inline i32
+minimum (i32 a, i32 b)
+{
+	i32 result = (a < b)? a : b;
+	return(result);
+}
+inline i32
+maximum (i32 a, i32 b)
+{
+	i32 result = (a < b)? b : a;
+	return(result);
+}
+#define swap(a, b) { auto _ = a; a = b; b = _; }
 
 struct Graphics
 {
@@ -27,11 +44,24 @@ struct Graphics
 	u64 size;
 };
 
+struct State
+{
+	u32 line_height;
+	u32 line;
+
+	u32 character_width;
+	u32 cursor_width;
+	u32 cursor;
+
+	u32 line_number_width;
+};
+
 global bool32	global_running  = true;
 global Graphics	global_graphics = {};
+global State    global_state    = {};
 
 internal void
-win_resize_graphics_buffer(u32 width, u32 height)
+win_resize_backbuffer(u32 width, u32 height)
 {
 	if (global_graphics.buffer)
 	{
@@ -95,7 +125,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			GetClientRect(window, &client_rect);
 			u32 width  = client_rect.right - client_rect.left;
 			u32 height = client_rect.bottom - client_rect.top;
-			win_resize_graphics_buffer(width, height);
+			win_resize_backbuffer(width, height);
 		} break;
 		case WM_PAINT:
 		{
@@ -104,12 +134,76 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			win_update_window(window, device_context);
 			EndPaint(window, &paint);
 		} break;
+		case WM_KEYDOWN:
+		{
+			switch (wparam)
+			{
+				case VK_UP:
+				{
+					global_state.line = maximum(global_state.line - 1, 0);
+				} break;
+				case VK_DOWN:
+				{
+					global_state.line++;
+				} break;
+				case VK_RIGHT:
+				{
+					global_state.cursor++;
+				} break;
+				case VK_LEFT:
+				{
+					global_state.cursor = maximum(global_state.cursor - 1, 0);
+				} break;
+			}
+		} break;
 		default:
 		{
 			result = DefWindowProc(window, message, wparam, lparam);
 		} break;
 	}
 	return(result);
+}
+
+internal void
+draw_rect (Graphics *graphics, i32 min_x, i32 min_y, i32 max_x, i32 max_y, u32 color)
+{
+	if (min_x > max_x)
+		swap(min_x, max_x);
+	if (min_y > max_y)
+		swap(min_y, max_y);
+
+	u32 x_min = (u32)maximum(min_x, 0);
+	u32 y_min = (u32)maximum(min_y, 0);
+	u32 x_max = (u32)minimum(max_x, graphics->width);
+	u32 y_max = (u32)minimum(max_y, graphics->height);
+
+	u32 stride = graphics->width + x_min - x_max;
+	u32 *buffer = (u32*)graphics->buffer + y_min * graphics->width + x_min;
+	for (u32 y = y_min; y < y_max; y++)
+	{
+		for (u32 x = x_min; x < x_max; x++)
+			*(buffer++) = color;
+		buffer += stride;
+	}
+}
+
+inline u32
+color(f32 red, f32 green, f32 blue, f32 alpha = 1.0f)
+{
+	u32 result = 
+		  ((u32)(alpha * 255) << 24)
+		| ((u32)(red   * 255) << 16)
+		| ((u32)(green * 255) << 8)
+		| ((u32)(blue  * 255) << 0);
+
+	return(result);
+}
+
+inline u32
+color(f32 luminosity, f32 alpha = 1.0f)
+{
+	u32 result = color(luminosity, luminosity, luminosity, alpha);
+	return result;
 }
 
 int
@@ -134,6 +228,15 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 
 		if (window)
 		{
+			global_state.line_height = 16;
+			global_state.line = 0;
+
+			global_state.character_width = 8;
+			global_state.cursor_width = 1;
+			global_state.cursor = 0;
+
+			global_state.line_number_width = 30;
+
 			while (global_running)
 			{
 				MSG message;
@@ -144,9 +247,41 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 					else 
 						DispatchMessage(&message);
 				}
-				for (u32 y = 0; y < global_graphics.height; y++)
-					for (u32 x = 0; x < global_graphics.width; x++)
-						((u32*)global_graphics.buffer)[y * global_graphics.width + x] = 0x00ffffff;
+
+				u32 width  = global_graphics.width;
+				u32 height = global_graphics.height;
+
+				u32 line_number_width	= global_state.line_number_width;
+				u32 line_height			= global_state.line_height;
+				u32 line				= global_state.line;
+				u32 character_width		= global_state.character_width;
+				u32 cursor_width		= global_state.cursor_width;
+				u32 cursor				= global_state.cursor;
+
+				// background
+				draw_rect(&global_graphics, 0, 0, width, height, color(1));
+
+				// line number sidebar
+				draw_rect(&global_graphics, 0, 0, line_number_width, height, color(0.9f));
+
+				// line highlight
+				draw_rect(&global_graphics,
+					line_number_width, line * line_height,
+					width 			 , (line + 1) * line_height,
+					color(0.95f));
+
+				// line number highlight
+				draw_rect(&global_graphics,
+					0				 , line * line_height,
+					line_number_width, (line + 1) * line_height,
+					color(0.85f));
+
+				// caret
+				draw_rect(&global_graphics,
+					line_number_width + cursor * character_width, line * line_height,
+					line_number_width + cursor * character_width + cursor_width, (line + 1) * line_height,
+					color(0));
+
 				win_update_window(window);
 			}
 		}
