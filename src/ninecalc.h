@@ -1,19 +1,11 @@
 #pragma once
-struct Graphics
+#include "gr.h"
+
+struct Canvas
 {
-	void *buffer;
-	BITMAPINFO bitmap_info;
-	u8 bytes_per_pixel;
+	u32 *buffer;
 	u32 width;
 	u32 height;
-	u64 size;
-};
-
-struct Memory
-{
-	void *contents;
-	u64 size;
-	u64 used;
 };
 
 struct Glyph {
@@ -36,12 +28,27 @@ struct Font
 	Glyph *glyphs;
 };
 
+struct String
+{
+	u32 *data;
+	u64 capacity;
+	u64 length;
+
+	u32 &operator[](u64 index);
+};
+
+u32 &String::operator[](u64 index)
+{
+	assert(index < this->capacity);
+	return(this->data[index]);
+}
+
 struct State
 {
 	Font loaded_font;
-
-	u32 current_line;
-	u32 current_cursor_position;
+	String text;
+	
+	u32 cursor_position;
 
 	u32 caret_x;
 	u32 caret_width;
