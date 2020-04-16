@@ -1,5 +1,6 @@
 #pragma once
 #include "grs.h"
+#include "memory.h"
 
 struct String
 {
@@ -92,16 +93,12 @@ split_lines(Memory *memory, String text, u64 *number_of_lines)
 
 			last_line = i + 1;
 			(*number_of_lines)++;
-			if (last_line < text.length)
-				current_substring = allocate_struct(memory, String);
+			current_substring = allocate_struct(memory, String);
 		}
 	}
-	if (last_line < text.length)
-	{
-		current_substring->data   = text.data + last_line;
-		current_substring->length = i - last_line;
-		current_substring->capacity = text.capacity - last_line;
-	}
+	current_substring->data   = text.data + last_line;
+	current_substring->length = i - last_line;
+	current_substring->capacity = text.capacity - last_line;
 
 	return(substrings);
 }

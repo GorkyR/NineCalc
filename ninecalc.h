@@ -1,6 +1,6 @@
 #pragma once
 #include "grs.h"
-#include "ninecalc_string.h"
+#include "string.h"
 
 struct Canvas
 {
