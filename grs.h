@@ -1,4 +1,5 @@
 #pragma once
+
 #define internal   static
 #define global     static
 #define persistent static
@@ -16,17 +17,16 @@ typedef unsigned long long u64;
 typedef float  f32;
 typedef double f64;
 
-typedef s32 bool32;
-typedef s64 bool64;
+typedef u8  bool8;
+typedef u32 bool32;
+typedef u64 bool64;
 
-inline s32
-minimum (s32 a, s32 b)
+inline s32 minimum(s32 a, s32 b)
 {
 	s32 result = (a < b)? a : b;
 	return(result);
 }
-inline s32
-maximum (s32 a, s32 b)
+inline s32 maximum(s32 a, s32 b)
 {
 	s32 result = (a < b)? b : a;
 	return(result);

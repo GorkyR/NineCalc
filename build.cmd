@@ -8,5 +8,5 @@ set dllExports=/EXPORT:update_and_render
 IF NOT EXIST build (mkdir build)
 pushd build
 	del *.pdb > NUL 2> NUL
-	cl %compileFlags% %defineFlags% ..\src\win_ninecalc.cpp -Fe:ninecalc.exe %linkFlags%
+	cl %compileFlags% %defineFlags% ..\win_ninecalc.cpp -Fe:ninecalc.exe %linkFlags%
 popd

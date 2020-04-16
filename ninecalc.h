@@ -1,5 +1,6 @@
 #pragma once
-#include "gr.h"
+#include "grs.h"
+#include "ninecalc_string.h"
 
 struct Canvas
 {
@@ -27,21 +28,6 @@ struct Font
 
 	Glyph *glyphs;
 };
-
-struct String
-{
-	u32 *data;
-	u64 capacity;
-	u64 length;
-
-	u32 &operator[](u64 index);
-};
-
-u32 &String::operator[](u64 index)
-{
-	assert(index < this->capacity);
-	return(this->data[index]);
-}
 
 struct State
 {

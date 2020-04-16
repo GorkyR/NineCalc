@@ -1,10 +1,12 @@
-#include "gr.h"
-#include "ninecalc_memory.cpp"
+#include "grs.h"
+#include "ninecalc_memory.h"
 #include "ninecalc.cpp"
 
 #include "stb_truetype.h"
 #include <windows.h>
 #include <stdio.h>
+
+#include "ninecalc_calculator.h"
 
 struct WIN_Graphics
 {
@@ -287,6 +289,8 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 
 	Memory temp = allocate_arena(&memory, kibibytes(50));
 
+	Token_List token_list = tokenize(&temp, make_string_from_chars(&temp, "123_456*789 + 0"));
+
 	WNDCLASSEX window_class = {};
 	window_class.cbSize = sizeof(window_class);
 	window_class.lpfnWndProc = win_callback;
@@ -405,7 +409,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 #endif
 
 				win_update_window(window, &win_graphics);
-				temp.used = 0;
+				free_arena(temp);
 			}
 		}
 	}
