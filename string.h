@@ -53,7 +53,7 @@ make_string_from_chars(Memory *memory, char *text)
 }
 
 String
-substring(String text, u32 offset, u32 size)
+substring(String text, u64 offset, u64 size)
 {
 	assert(offset + size <= text.length);
 	String substring;
@@ -64,7 +64,7 @@ substring(String text, u32 offset, u32 size)
 }
 
 String
-substring(String text, u32 offset)
+substring(String text, u64 offset)
 {
 	assert(offset <= text.length);
 	String substring;

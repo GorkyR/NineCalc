@@ -289,9 +289,6 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 
 	Memory temp = allocate_arena(&memory, kibibytes(50));
 
-	Token_List token_list = tokenize(&temp, make_string_from_chars(&temp, "123 + 456 * 789"));
-	AST* ast = parse(&temp, token_list);
-
 	WNDCLASSEX window_class = {};
 	window_class.cbSize = sizeof(window_class);
 	window_class.lpfnWndProc = win_callback;
@@ -374,7 +371,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 				for (u32 i = 1; i <= array_count(numbers); i++)
 				{
 					char buffer[3];
-					sprintf_s(&buffer[0], 3, "%d", i);
+					sprintf_s(&buffer[0], sizeof(buffer), "%d", i);
 					numbers[i - 1] = make_string_from_chars(&temp, &buffer[0]);
 				}
 
@@ -406,6 +403,19 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 
                     // line content
 					draw_text(&canvas, &font, line, h_offset, v_offset, coloru8(0));
+
+					Result evaluation = evaluate(&temp, line);
+					if (evaluation.valid)
+					{
+						char buffer[100];
+						if (evaluation.type == Number_Type::Integer)
+							sprintf_s(&buffer[0], sizeof(buffer), "%d", evaluation.value.integer);
+						else
+							sprintf_s(&buffer[0], sizeof(buffer), "%f", evaluation.value.real);
+						String result = make_string_from_chars(&temp, buffer);
+						s32 result_width = get_text_width(&font, result);
+						draw_text(&canvas, &font, result, width - result_width, v_offset, coloru8(0, 128));
+					}
 				}
 #endif
 

@@ -4,10 +4,11 @@
 #include <cstdio>
 
 #undef assert
-#define assert(expression) { if (!(expression)) { failed = true; printf("  - Assertion failed: \"" #expression "\" (line %d)\n", __LINE__); } }
+#define assert(expression) { if (!(expression)) { failed = true; printf("\n  - Assertion failed: \"" #expression "\" (line %d)", __LINE__); } }
 
-#define begin_test() printf("\nTEST %d:\n", test_count); try {
-#define end_test() } catch(...) { failed = true; printf("  - Exception.\n"); } if (failed) { printf("  FAILED\n"); ++test_count; } else { printf("  PASSED\n"); ++test_count; }
+#define begin_test            { failed = false; printf("TEST %2d (line %4d):", test_count, __LINE__); } try
+//#define begin_test(test_name) printf("TEST %s (line %4d):", test_name, test_count, __LINE__); try {
+#define end_test              catch(...) { failed = true; printf("\n  - Exception."); } if (failed) { printf("\n  FAILED\n"); ++test_count; } else { printf(" PASSED\n"); ++test_count; }
 
 int main()
 {
@@ -17,8 +18,7 @@ int main()
 	u32 test_count = 1;
 	bool32 failed = false;
 
-	begin_test();
-	{
+	begin_test {
 		// "1 + 23" ->
 		// num(1), op(+), num(23) ->
 		// node(+, node(1), node(23))
@@ -40,11 +40,9 @@ int main()
 			assert(ast->right->token.type == Token_Type::Number);
 			assert(!ast->right->left);
 			assert(!ast->right->right);
-	}
-	end_test();
+	} end_test;
 
-	begin_test();
-	{
+	begin_test {
 		// "1 + 23 * 456" ->
 		// num(1), op(+), num(23), op(*), num(456) ->
 		// node(+, node(1), node(*, node(23), node(546)))
@@ -74,11 +72,9 @@ int main()
 				assert(ast->right->right->token.type == Token_Type::Number);
 				assert(!ast->right->right->left);
 				assert(!ast->right->right->right);
-	}
-	end_test();
+	} end_test;
 
-	begin_test();
-	{
+	begin_test {
 		// "(1 + 23) * 456" ->
 		// paren((), num(1), op(+), num(23), paren()), op(*), num(456) ->
 		// node(*, node(+, node(1), node(23)), node(456))
@@ -110,11 +106,9 @@ int main()
 			assert(ast->right->token.type == Token_Type::Number);
 			assert(!ast->right->left);
 			assert(!ast->right->right);
-	}
-	end_test();
+	} end_test;
 
-	begin_test();
-	{
+	begin_test {
 		// "((1 + 23) * 456) / 7890" ->
 		// paren((), paren((), num(1), op(+), num(23), paren()), op(*), num(456), paren()), op(/), num(7890) ->
 		// node(/, node(*, node(+, node(1), node(23)), node(456)), node(7890))
@@ -156,11 +150,9 @@ int main()
 			assert(ast->right->token.type == Token_Type::Number);
 			assert(!ast->right->left);
 			assert(!ast->right->right);
-	}
-	end_test();
+	} end_test;
 
-	begin_test();
-	{
+	begin_test {
 		// "prev + 5" ->
 		// ident(prev), op(+), num(5) ->
 		// node(+, node(prev), node(5))
@@ -182,6 +174,63 @@ int main()
 			assert(ast->right->token.type == Token_Type::Number);
 			assert(!ast->right->left);
 			assert(!ast->right->right);
-	}
-	end_test();
+	} end_test;
+
+	begin_test {
+		// "" -> invalid()
+
+		String text = make_string_from_chars(&arena, "");
+		Token_List tokens = tokenize(&arena, text);
+		AST* ast = parse(&arena, tokens);
+		Result result = evaluate(*ast);
+		assert(!result.valid);
+	} end_test;
+
+	begin_test {
+		// "27" -> int(27)
+
+		String text = make_string_from_chars(&arena, "27");
+		Token_List tokens = tokenize(&arena, text);
+		AST* ast = parse(&arena, tokens);
+		Result result = evaluate(*ast);
+		assert(result.valid);
+		assert(result.type == Number_Type::Integer);
+		assert(result.value.integer == 27);
+	} end_test;
+
+	begin_test {
+		// "0.5" -> real(0.5)
+
+		String text = make_string_from_chars(&arena, "0.5");
+		Token_List tokens = tokenize(&arena, text);
+		AST* ast = parse(&arena, tokens);
+		Result result = evaluate(*ast);
+		assert(result.valid);
+		assert(result.type == Number_Type::Real);
+		assert(result.value.real == 0.5);
+	} end_test;
+
+	begin_test {
+		// "1 + 2" -> int(3)
+
+		String text = make_string_from_chars(&arena, "1 + 2");
+		Token_List tokens = tokenize(&arena, text);
+		AST* ast = parse(&arena, tokens);
+		Result result = evaluate(*ast);
+		assert(result.valid);
+		assert(result.type == Number_Type::Integer);
+		assert(result.value.integer == 3);
+	} end_test;
+
+	begin_test {
+		// "1 + 2.3" -> real(3.3)
+
+		String text = make_string_from_chars(&arena, "1 + 2.3");
+		Token_List tokens = tokenize(&arena, text);
+		AST* ast = parse(&arena, tokens);
+		Result result = evaluate(*ast);
+		assert(result.valid);
+		assert(result.type == Number_Type::Real);
+		assert(result.value.real == 3.3);
+	} end_test;;
 }

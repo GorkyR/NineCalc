@@ -12,9 +12,12 @@ enum Token_Type
 	End
 };
 
+enum Number_Type { NotANumber, Integer, Real };
+
 struct Token
 {
 	Token_Type type;
+	Number_Type number_type;
 	String text;
 };
 
@@ -32,22 +35,10 @@ void consume_whitespace(String *text)
 	*text = substring(*text, offset);
 }
 
-internal inline bool32 is_numeric(u32 codepoint)
-{
-	return(codepoint >= '0' && codepoint <= '9');
-}
-internal inline bool32 is_alphabetic(u32 codepoint)
-{
-	return((codepoint >= 'A' && codepoint <= 'Z') || (codepoint >= 'a' && codepoint <= 'z'));
-}
-internal inline bool32 is_legal_number_codepoint(u32 codepoint)
-{
-	return(is_numeric(codepoint) || codepoint == '.' || codepoint == '_');
-}
-internal inline bool32 is_legal_identifier_codepoint(u32 codepoint)
-{
-	return(is_alphabetic(codepoint) || is_numeric(codepoint) || codepoint == '_');
-}
+internal inline bool32 is_numeric(u32 codepoint) { return(codepoint >= '0' && codepoint <= '9'); }
+internal inline bool32 is_alphabetic(u32 codepoint) { return((codepoint >= 'A' && codepoint <= 'Z') || (codepoint >= 'a' && codepoint <= 'z')); }
+internal inline bool32 is_legal_number_codepoint(u32 codepoint) { return(is_numeric(codepoint) || codepoint == '.' || codepoint == '_'); }
+internal inline bool32 is_legal_identifier_codepoint(u32 codepoint) { return(is_alphabetic(codepoint) || is_numeric(codepoint) || codepoint == '_'); }
 
 Token *tokenize_number(Memory *arena, String *text)
 {
@@ -91,6 +82,7 @@ Token *tokenize_number(Memory *arena, String *text)
 	else
 	{
 		token->type = Token_Type::Number;
+		token->number_type = decimal? Number_Type::Real : Number_Type::Integer;
 	}
 	token->text = substring(*text, 0, offset);
 	*text = substring(*text, offset);
@@ -138,7 +130,7 @@ Token_List tokenize(Memory *arena, String text) {
 		{
 			token = tokenize_number(arena, &text);
 		}
-		else if (c == '+' || c == '-' || c == '*' || c == '/')
+		else if (c == '+' || c == '-' || c == '*' || c == '/' || c == '^')
 		{
 			token = allocate_struct(arena, Token);
 			token->type = Token_Type::Operator;
@@ -163,6 +155,8 @@ Token_List tokenize(Memory *arena, String text) {
 	}
 	Token *token = allocate_struct(arena, Token);
 	token->type = Token_Type::End;
+	if (!token_list.count)
+		token_list.tokens = token;
 	++token_list.count;
 	return(token_list);
 }
@@ -194,6 +188,8 @@ struct AST
 // "prev + 5" ->
 // ident(prev), op(+), num(5) ->
 // node(+, node(prev), node(5))
+
+
 
 AST *parse(Memory *arena, Token_List tokens, u32 from = 0, bool32 in_parenthesis = false)
 {
@@ -234,7 +230,8 @@ AST *parse(Memory *arena, Token_List tokens, u32 from = 0, bool32 in_parenthesis
 			}
 			else 
 			{
-				// @TODO: Invalid
+				node = allocate_struct(arena, AST);
+				*node = {};
 			}
 		}
 		else
@@ -272,9 +269,197 @@ AST *parse(Memory *arena, Token_List tokens, u32 from = 0, bool32 in_parenthesis
 		}
 		else
 		{
-			// @TODO: Invalid
+			node = allocate_struct(arena, AST);
+			*node = {};
 		}
+	}
+	else
+	{
+		node = allocate_struct(arena, AST);
+		*node = {};
 	}
 
 	return(node);
+}
+
+s64 parse_integer(String text)
+{
+	assert(text[0] != '-');    // assume always positive
+	assert(text.length <= 18); // max 18-digit integer (10 quintillions - 1)
+
+	s64 result = 0;
+	for (u64 i = 0; i < text.length; i++)
+	{
+		result *= 10;
+		u32 codepoint = text[i];
+		if (is_numeric(codepoint))
+			result += codepoint - '0';
+	}
+
+	return(result);
+}
+
+f64 parse_real(String text)
+{
+	assert(text[0] != '-');
+	u64 decimal_offset = 0;
+	for (; decimal_offset < text.length; ++decimal_offset)
+		if (text[decimal_offset] == '.')
+			break;
+
+	f64 result = parse_integer(substring(text, 0, decimal_offset));
+
+	f64 pow_ten = 10;
+	for (u64 i = decimal_offset + 2; i < text.length; ++i)
+		pow_ten *= 10;
+	result += parse_integer(substring(text, decimal_offset + 1)) / pow_ten;
+
+	return(result);
+}
+
+struct Result
+{
+	bool32 valid;
+	Number_Type type;
+	union
+	{
+		s64 integer;
+		f64 real;
+	} value;
+};
+
+Result evaluate(AST node)
+{
+	Result result = {};
+	if (node.token.type == Token_Type::Number)
+	{
+		result.type = node.token.number_type;
+		if (node.token.number_type == Number_Type::Integer)
+		{
+			result.value.integer = parse_integer(node.token.text);
+			result.valid = true;
+		}
+		else if (node.token.number_type == Number_Type::Real)
+		{
+			result.value.real = parse_real(node.token.text);
+			result.valid = true;
+		}
+	}
+	else if (node.token.type == Token_Type::Operator)
+	{
+		if (node.token.text[0] == '+')
+		{
+			Result res1 = evaluate(*node.left);
+			Result res2 = evaluate(*node.right);
+			if (res1.valid & res2.valid)
+			{
+				if (res1.type == Number_Type::Real || res2.type == Number_Type::Real)
+				{
+					result.type = Number_Type::Real;
+
+					if (res1.type == Number_Type::Real)
+						result.value.real = res1.value.real;
+					else
+						result.value.real = res1.value.integer;
+
+					if (res2.type == Number_Type::Real)
+						result.value.real += res2.value.real;
+					else
+						result.value.real += res2.value.integer;
+				}
+				else
+				{
+					result.type = Number_Type::Integer;
+					result.value.integer = res1.value.integer + res2.value.integer;
+				}
+				result.valid = true;
+			}
+		}
+
+		if (node.token.text[0] == '-')
+		{
+			Result res1 = evaluate(*node.left);
+			Result res2 = evaluate(*node.right);
+			if (res1.valid & res2.valid)
+			{
+				if (res1.type == Number_Type::Real || res2.type == Number_Type::Real)
+				{
+					result.type = Number_Type::Real;
+
+					if (res1.type == Number_Type::Real)
+						result.value.real = res1.value.real;
+					else
+						result.value.real = res1.value.integer;
+
+					if (res2.type == Number_Type::Real)
+						result.value.real -= res2.value.real;
+					else
+						result.value.real -= res2.value.integer;
+				}
+				else
+				{
+					result.type = Number_Type::Integer;
+					result.value.integer = res1.value.integer - res2.value.integer;
+				}
+				result.valid = true;
+			}
+		}
+
+		if (node.token.text[0] == '*')
+		{
+			Result res1 = evaluate(*node.left);
+			Result res2 = evaluate(*node.right);
+			if (res1.valid & res2.valid)
+			{
+				if (res1.type == Number_Type::Real || res2.type == Number_Type::Real)
+				{
+					result.type = Number_Type::Real;
+
+					if (res1.type == Number_Type::Real)
+						result.value.real = res1.value.real;
+					else
+						result.value.real = res1.value.integer;
+
+					if (res2.type == Number_Type::Real)
+						result.value.real *= res2.value.real;
+					else
+						result.value.real *= res2.value.integer;
+				}
+				else
+				{
+					result.type = Number_Type::Integer;
+					result.value.integer = res1.value.integer * res2.value.integer;
+				}
+				result.valid = true;
+			}
+		}
+
+		if (node.token.text[0] == '/')
+		{
+			Result res1 = evaluate(*node.left);
+			Result res2 = evaluate(*node.right);
+			if (res1.valid & res2.valid)
+			{
+				result.type = Number_Type::Real;
+				if (res1.type == Number_Type::Real)
+					result.value.real = res1.value.real;
+				else
+					result.value.real = res1.value.integer;
+
+				if (res2.type == Number_Type::Real)
+					result.value.real /= res2.value.real;
+				else
+					result.value.real /= res2.value.integer;
+				result.valid = true;
+			}
+		}
+	}
+	return(result);
+}
+
+Result evaluate(Memory *arena, String text)
+{
+	Token_List tokens = tokenize(arena, text);
+	AST *node = parse(arena, tokens);
+	return(evaluate(*node));
 }
