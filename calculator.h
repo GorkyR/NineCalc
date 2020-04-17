@@ -119,7 +119,11 @@ struct Token_List
 
 Token &Token_List::operator[](u64 index)
 {
+#if 0
 	assert(index < this->count);
+#else
+	index = (index >= this->count? this->count - 1 : index);
+#endif
 	return(this->tokens[index]);
 }
 
@@ -214,11 +218,11 @@ struct AST
 //                         / \         / \    
 //                       40   1      500  40  
 
-//                        *               /   
-//                       / \             / \  
-// "500 * 40 / 1"  =>  500  /    =>     *   1 
-//                         / \         / \    
-//                       40   1      500  40  
+//                     ÷            *   
+//                    / \          / \  
+// "15 / 3 * 4"  =>  15  *   =>   ÷   4 
+//                      / \      / \    
+//                     3   4    15  3   
 
 AST *parse(Memory *arena, Token_List tokens, u32 from = 0, bool32 in_parenthesis = false)
 {
