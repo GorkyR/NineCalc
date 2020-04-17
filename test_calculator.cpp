@@ -232,5 +232,48 @@ int main()
 		assert(result.valid);
 		assert(result.type == Number_Type::Real);
 		assert(result.value.real == 3.3);
-	} end_test;;
+	} end_test;
+
+	begin_test {
+		//                        *                +    
+		//                       / \              / \   
+		// "1 * 20 + 300"  =>  10   +     =>     *   30 
+		//                         / \          / \     
+		//                       20   30      10   20  
+
+		String text = make_string_from_chars(&arena, "1 * 20 + 300");
+		Token_List tokens = tokenize(&arena, text);
+		AST *ast = parse(&arena, tokens);
+		assert(ast->token.type == Token_Type::Operator);
+		assert(ast->token.precedence == Operator_Precedence::Addition);
+		assert(ast->left);
+			assert(ast->left->token.type == Token_Type::Operator);
+			assert(ast->left->token.precedence == Operator_Precedence::Multiplication);
+			assert(ast->left->left );
+				assert(ast->left->left->token.type == Token_Type::Number);
+				assert(!ast->left->left->left );
+				assert(!ast->left->left->right);
+			assert(ast->left->right);
+				assert(ast->left->right->token.type == Token_Type::Number);
+				assert(!ast->left->right->left );
+				assert(!ast->left->right->right);
+		assert(ast->right);
+			assert(ast->right->token.type == Token_Type::Number);
+			assert(!ast->right->left);
+			assert(!ast->right->right);
+	} end_test;
+
+	begin_test {
+		//                        -               +   
+		//                       / \             / \  
+		// "500 - 40 + 1"  =>  500  +    =>     -   1 
+		//                         / \         / \    
+		//                       40   1      500  40  
+
+		Result result = evaluate(&arena, make_string_from_chars(&arena, "500 - 40 + 1"));
+		assert(result.valid);
+		assert(result.type == Number_Type::Integer);
+		assert(result.value.integer == 461);
+		assert(result.value.integer != 459);
+	} end_test;
 }

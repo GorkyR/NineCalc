@@ -12,13 +12,17 @@ enum Token_Type
 	End
 };
 
-enum Number_Type { NotANumber, Integer, Real };
+enum Number_Type { Integer, Real };
+enum Operator_Precedence  { Addition, Subtraction, Multiplication, Division, Exponentiation };
 
 struct Token
 {
 	Token_Type type;
-	Number_Type number_type;
 	String text;
+	union {
+		Number_Type number_type;
+		Operator_Precedence  precedence;
+	};
 };
 
 void consume_whitespace(String *text)
@@ -136,6 +140,13 @@ Token_List tokenize(Memory *arena, String text) {
 			token->type = Token_Type::Operator;
 			token->text = substring(text, 0, 1);
 			text = substring(text, 1);
+			switch(c) {
+				case '-': { token->precedence = Operator_Precedence::Subtraction   ; } break;
+				case '+': { token->precedence = Operator_Precedence::Addition      ; } break;
+				case '/': { token->precedence = Operator_Precedence::Division      ; } break;
+				case '*': { token->precedence = Operator_Precedence::Multiplication; } break;
+				case '^': { token->precedence = Operator_Precedence::Exponentiation; } break;
+			}
 		}
 		else if (c == '(' || c == ')')
 		{
@@ -173,9 +184,11 @@ struct AST
 // num(123), op(+), num(456) ->
 // node(+, node(123), node(456))
 
-// "1 + 23 * 456" ->
-// num(1), op(+), num(23), op(*), num(456) ->
-// node(+, node(1), node(*, node(23), node(546)))
+// "1 + 23 * 456" ->   +
+//                    / \
+//                   1   *
+//                      / \
+//                    23   456
 
 // "(1 + 23) * 456" ->
 // paren((), num(1), op(+), num(23), paren()), op(*), num(456) ->
@@ -189,7 +202,23 @@ struct AST
 // ident(prev), op(+), num(5) ->
 // node(+, node(prev), node(5))
 
+//                        *                +    
+//                       / \              / \   
+// "1 * 20 + 300"  =>  10   +     =>     *   30 
+//                         / \          / \     
+//                       20   30      10   20   
 
+//                        -               +   
+//                       / \             / \  
+// "500 - 40 + 1"  =>  500  +    =>     -   1 
+//                         / \         / \    
+//                       40   1      500  40  
+
+//                        *               /   
+//                       / \             / \  
+// "500 * 40 / 1"  =>  500  /    =>     *   1 
+//                         / \         / \    
+//                       40   1      500  40  
 
 AST *parse(Memory *arena, Token_List tokens, u32 from = 0, bool32 in_parenthesis = false)
 {
@@ -217,6 +246,15 @@ AST *parse(Memory *arena, Token_List tokens, u32 from = 0, bool32 in_parenthesis
 
 			node->right = parse(arena, tokens, from + 2, in_parenthesis);
 			node->consumed_tokens = 1 + node->left->consumed_tokens + node->right->consumed_tokens;
+
+			if (node->right->token.type == Token_Type::Operator &&
+				node->right->token.precedence <= node->token.precedence)
+			{
+				AST *node_right_left = node->right->left;
+				node->right->left = node;
+				node = node->right;
+				node->left->right = node_right_left;
+			}
 		}
 		else if (next_token.type == Token_Type::Parenthesis)
 		{
@@ -321,11 +359,7 @@ struct Result
 {
 	bool32 valid;
 	Number_Type type;
-	union
-	{
-		s64 integer;
-		f64 real;
-	} value;
+	union { s64 integer; f64 real; } value;
 };
 
 Result evaluate(AST node)
