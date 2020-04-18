@@ -197,7 +197,29 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 				} break;
 				case VK_RETURN:
 				{
-					insert(&state->text, '\n', state->cursor_position++);
+					insert_character_if_fits(&state->text, '\n', state->cursor_position++);
+				} break;
+				case VK_BACK:
+				{
+					if (state->cursor_position > 0)
+					{
+						remove(&state->text, --state->cursor_position, 1);
+					}
+				} break;
+				case VK_DELETE:
+				{
+					if (state->cursor_position < state->text.length)
+					{
+						remove(&state->text, state->cursor_position, 1);
+					}
+				} break;
+				case VK_HOME:
+				{
+					// @TODO
+				} break;
+				case VK_END:
+				{
+					// @TODO
 				} break;
 			}
 		} break;
@@ -216,7 +238,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 				if (character <= range[1] && character >= range[0])
 				{
 					// ...then write it.
-					insert(&state->text, character, state->cursor_position++);
+					insert_character_if_fits(&state->text, character, state->cursor_position++);
 					break;
 				}
 			}

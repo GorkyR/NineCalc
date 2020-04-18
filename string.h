@@ -308,37 +308,56 @@ String concatenate(Memory *arena, String a, String b)
 	return(concatenation);
 }
 
-void insert(String *into, u32 character, u64 at)
+bool32 insert_character_if_fits(String *into, u32 character, u64 at)
 {
-	assert(into->capacity > into->length + 1); // it should fit
-	assert(at <= into->length);               // and be contiguous
-
-	for (u64 i = into->length, c = 0;
-		c < into->length - at; --i, ++c)
+	if (into->capacity > into->length + 1)
 	{
-		(*into)[i] = (*into)[into->length - c - 1];
+		assert(at <= into->length); // should be contiguous
+
+		for (u64 i = into->length, c = 0;
+			c < into->length - at; --i, ++c)
+		{
+			(*into)[i] = (*into)[into->length - c - 1];
+		}
+
+		(*into)[at] = character;
+
+		into->length += 1;
+		return(true);
 	}
-
-	(*into)[at] = character;
-
-	into->length += 1;
+	return(false);
 }
 
-void insert(String *into, String other, u64 at)
+bool32 insert_string_if_fits(String *into, String other, u64 at)
 {
-	assert(into->capacity > (into->length + other.length)); // it should fit
-	assert(at <= into->length);                            // and be contiguous
-
-	for (u64 i = into->length + other.length - 1, c = 0;
-		c < into->length - at; --i, ++c)
+	if (into->capacity > (into->length + other.length))
 	{
-		(*into)[i] = (*into)[into->length - c - 1];
-	}
+		assert(at <= into->length); // should be contiguous
 
-	for (u64 i = 0; i < other.length; ++i)
-	{
-		(*into)[at + i] = other[i];
-	}
+		for (u64 i = into->length + other.length - 1, c = 0;
+			c < into->length - at; --i, ++c)
+		{
+			(*into)[i] = (*into)[into->length - c - 1];
+		}
 
-	into->length += other.length;
+		for (u64 i = 0; i < other.length; ++i)
+		{
+			(*into)[at + i] = other[i];
+		}
+
+		into->length += other.length;
+		return(true);
+	}
+	return(false);
+}
+
+void remove(String *from, u64 at, u64 count)
+{
+	assert(at < from->length);
+	count = minimum(count, from->length - at);
+
+	for (u64 i = at + count, c = 0; i < from->length; ++i, ++c)
+		from->data[at + c] = from->data[i];
+
+	from->length -= count;
 }
