@@ -10,6 +10,6 @@ set linkFlags=/link -incremental:no -opt:ref
 IF NOT EXIST build (mkdir build)
 pushd build
 	del *.pdb > NUL 2> NUL
-	cl %compileFlags% %defineFlags% ..\%entryFile% -Fe:%outputFile% %linkFlags%
-	.\%outputFile%
+	del %outputFile% > NUL 2> NUL
+	cl %compileFlags% %defineFlags% ..\%entryFile% -Fe:%outputFile% %linkFlags% && .\%outputFile%
 popd

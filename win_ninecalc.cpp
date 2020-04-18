@@ -116,13 +116,76 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 		{
 			switch (wparam)
 			{
-				/*case VK_UP:
+				case VK_UP:
 				{
-					state->current_line = maximum(state->current_line - 1, 0);
+					String text = state->text;
+					u64 offset = 0;
+
+					u64 prev_line_start = 0, line_start = 0;
+					bool32 is_first_line = true;
+					for (u64 i = 0; i < text.length; i++)
+					{
+						if (i == state->cursor_position)
+						{
+							offset = i - line_start;
+							break;
+						}
+						if (text[i] == '\n')
+						{
+							prev_line_start = line_start;
+							line_start = i + 1;
+							is_first_line = false;
+						}
+					}
+					if (state->cursor_position == text.length)
+					{
+						offset = text.length - line_start;
+					}
+
+					if (!is_first_line)
+					{
+						state->cursor_position = minimum(prev_line_start + offset, line_start - 1);
+					}
 				} break;
 				case VK_DOWN:
 				{
-					state->current_line++;
+					String text = state->text;
+					u64 offset = 0;
+
+					u64 line_start = 0, next_line_start = 0, next_line_end = text.length;
+					bool32 current_line_found = false, next_line_found = false;
+					bool32 is_last_line = true;
+					for (u64 i = 0; i < text.length; i++)
+					{
+						if (i == state->cursor_position)
+						{
+							current_line_found = true;
+							offset = i - line_start;
+						}
+						if (text[i] == '\n')
+						{
+							if (current_line_found)
+							{
+								if (next_line_found)
+								{
+									next_line_end = i + 1;
+									break;
+								}
+								next_line_start = i + 1;
+								is_last_line = false;
+								next_line_found = true;
+							}
+							else
+							{
+								line_start = i + 1;
+							}
+						}
+					}
+
+					if (!is_last_line)
+					{
+						state->cursor_position = minimum(next_line_start + offset, next_line_end);
+					}
 				} break;/**/
 				case VK_RIGHT:
 				{
@@ -324,7 +387,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 
 				u32 line_number_bar_width	= state->line_number_bar_width;
 				u32 caret_width			    = state->caret_width;
-				u32 cursor_position		    = state->cursor_position;
+				u64 cursor_position		    = state->cursor_position;
 
 				Font font = state->loaded_font;
 
@@ -351,20 +414,6 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 						colorf32(0.85f));
 				}
 
-#if 0
-				{
-					s32 caret_x;
-					get_text_width(&state->loaded_font, state->text, cursor_position, &caret_x);
-					// caret
-					draw_rect(&canvas,
-						h_offset + caret_x			     , state->current_line * line_height,
-						h_offset + caret_x + caret_width, (state->current_line + 1) * line_height,
-						colorf32(0));
-
-
-					draw_text(&canvas, &state->loaded_font, state->text, 40, state->loaded_font.baseline_from_top + 5, coloru8(0));
-				}
-#else
 				// Write the usage code first!
 
 				String numbers[50];
@@ -388,7 +437,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 					{
 						// caret
 						s32 caret_offset = 0;
-						get_text_width(&font, line, cursor_position - (u32)(line.data - state->text.data), &caret_offset);
+						get_text_width(&font, line, cursor_position - (u64)(line.data - state->text.data), &caret_offset);
 						draw_rect(&canvas,
 							h_offset + caret_offset			     , current_line * font.line_height,
 							h_offset + caret_offset + caret_width, (current_line + 1) * font.line_height,
@@ -407,17 +456,15 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 					Result evaluation = evaluate(&temp, line);
 					if (evaluation.valid)
 					{
-						char buffer[100];
+						String result;
 						if (evaluation.type == Number_Type::Integer)
-							sprintf_s(&buffer[0], sizeof(buffer), "%d", evaluation.value.integer);
+							result = convert_s64_to_string(&temp, evaluation.value.integer);
 						else
-							sprintf_s(&buffer[0], sizeof(buffer), "%f", evaluation.value.real);
-						String result = make_string_from_chars(&temp, buffer);
+							result = convert_f64_to_string(&temp, evaluation.value.real);
 						s32 result_width = get_text_width(&font, result);
 						draw_text(&canvas, &font, result, width - result_width, v_offset, coloru8(0, 128));
 					}
 				}
-#endif
 
 				win_update_window(window, &win_graphics);
 				free_arena(temp);

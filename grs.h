@@ -7,7 +7,7 @@
 typedef signed char  s8;
 typedef signed short s16;
 typedef signed int   s32;
-typedef signed long  s64;
+typedef signed long long s64;
 
 typedef unsigned char      u8;
 typedef unsigned short     u16;
@@ -15,20 +15,20 @@ typedef unsigned int       u32;
 typedef unsigned long long u64;
 
 typedef float  f32;
-typedef double f64;
+typedef long double f64;
 
 typedef u8  bool8;
 typedef u32 bool32;
 typedef u64 bool64;
 
-inline s32 minimum(s32 a, s32 b)
+inline s64 minimum(s64 a, s64 b)
 {
-	s32 result = (a < b)? a : b;
+	s64 result = (a < b)? a : b;
 	return(result);
 }
-inline s32 maximum(s32 a, s32 b)
+inline s64 maximum(s64 a, s64 b)
 {
-	s32 result = (a < b)? b : a;
+	s64 result = (a < b)? b : a;
 	return(result);
 }
 #define swap(a, b) { auto _ = a; a = b; b = _; }

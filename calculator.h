@@ -327,7 +327,7 @@ AST *parse(Memory *arena, Token_List tokens, u32 from = 0, bool32 in_parenthesis
 s64 parse_integer(String text)
 {
 	assert(text[0] != '-');    // assume always positive
-	assert(text.length <= 18); // max 18-digit integer (10 quintillions - 1)
+	assert(text.length <= 18); // max 18-digit integer (1 quintillion - 1)
 
 	s64 result = 0;
 	for (u64 i = 0; i < text.length; i++)
@@ -349,7 +349,7 @@ f64 parse_real(String text)
 		if (text[decimal_offset] == '.')
 			break;
 
-	f64 result = parse_integer(substring(text, 0, decimal_offset));
+	f64 result = (f64)parse_integer(substring(text, 0, decimal_offset));
 
 	f64 pow_ten = 10;
 	for (u64 i = decimal_offset + 2; i < text.length; ++i)
@@ -398,7 +398,7 @@ Result evaluate(AST node)
 					if (res1.type == Number_Type::Real)
 						result.value.real = res1.value.real;
 					else
-						result.value.real = res1.value.integer;
+						result.value.real = (f64)res1.value.integer;
 
 					if (res2.type == Number_Type::Real)
 						result.value.real += res2.value.real;
@@ -427,7 +427,7 @@ Result evaluate(AST node)
 					if (res1.type == Number_Type::Real)
 						result.value.real = res1.value.real;
 					else
-						result.value.real = res1.value.integer;
+						result.value.real = (f64)res1.value.integer;
 
 					if (res2.type == Number_Type::Real)
 						result.value.real -= res2.value.real;
@@ -456,7 +456,7 @@ Result evaluate(AST node)
 					if (res1.type == Number_Type::Real)
 						result.value.real = res1.value.real;
 					else
-						result.value.real = res1.value.integer;
+						result.value.real = (f64)res1.value.integer;
 
 					if (res2.type == Number_Type::Real)
 						result.value.real *= res2.value.real;
@@ -482,7 +482,7 @@ Result evaluate(AST node)
 				if (res1.type == Number_Type::Real)
 					result.value.real = res1.value.real;
 				else
-					result.value.real = res1.value.integer;
+					result.value.real = (f64)res1.value.integer;
 
 				if (res2.type == Number_Type::Real)
 					result.value.real /= res2.value.real;

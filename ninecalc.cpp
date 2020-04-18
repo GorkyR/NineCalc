@@ -101,13 +101,13 @@ draw_rect (Canvas *graphics, s32 min_x, s32 min_y, s32 max_x, s32 max_y, u32 col
 void
 draw_bitmap(Canvas *graphics, u32 *buffer, s32 left, s32 top, u32 width, u32 height)
 {
-	u32 min_x = maximum(left, 0);
-	u32 min_y = maximum(top, 0);
+	u32 min_x = (u32)maximum(left, 0);
+	u32 min_y = (u32)maximum(top, 0);
 	u32 offscreen_left = min_x - left;
 	u32 offscreen_top = min_y - top;
 
-	u32 max_x = minimum(left + width , graphics->width);
-	u32 max_y = minimum(top  + height, graphics->height);
+	u32 max_x = (u32)minimum(left + width , graphics->width);
+	u32 max_y = (u32)minimum(top  + height, graphics->height);
 	u32 offscreen_right  = width  + left - max_x;
 	u32 offscreen_bottom = height + top  - max_y;
 
@@ -160,13 +160,13 @@ draw_glyph(Canvas *graphics, Font *font, u32 codepoint, s32 left, s32 baseline, 
 		s32 width  = glyph->width;
 		s32 height = glyph->height;
 
-		s32 min_x = maximum(left, 0);
-		s32 min_y = maximum(top , 0);
+		s32 min_x = (s32)maximum(left, 0);
+		s32 min_y = (s32)maximum(top , 0);
 		s32 offscreen_left = min_x - left;
 		s32 offscreen_top  = min_y - top;
 
-		s32 max_x = minimum(left + width , graphics->width);
-		s32 max_y = minimum(top  + height, graphics->height);
+		s32 max_x = (s32)minimum(left + width , graphics->width);
+		s32 max_y = (s32)minimum(top  + height, graphics->height);
 		s32 offscreen_right  = width  + left - max_x;
 		s32 offscreen_bottom = height + top  - max_y;
 
@@ -202,7 +202,7 @@ draw_text(Canvas *graphics, Font *font, String text, s32 x, s32 y, u32 color)
 }
 
 internal s32
-get_text_width(Font* font, String text, u32 cursor_position = 0, s32 *caret_offset = 0)
+get_text_width(Font* font, String text, u64 cursor_position = 0, s32 *caret_offset = 0)
 {
 	u32 position = 0;
 	s32 span = 0;
@@ -219,16 +219,26 @@ get_text_width(Font* font, String text, u32 cursor_position = 0, s32 *caret_offs
 }
 
 internal u32
-get_current_line(String text, u32 cursor_position)
+get_current_line(String text, u64 cursor_position, u64 *offset_into_line = 0)
 {
+	u64 last_line = 0;
 	u32 current_line = 0;
 	for (u64 i = 0; i < text.length; i++)
 	{
 		if (cursor_position == i)
+		{
+			if (offset_into_line)
+				*offset_into_line = i - last_line - 1;
 			break;
+		}
 		if (text[i] == '\n')
+		{
+			last_line = i;
 			current_line++;
+		}
 	}
+	if (cursor_position == text.length && offset_into_line)
+		*offset_into_line = cursor_position - last_line - 1;
 	return(current_line);
 }
 

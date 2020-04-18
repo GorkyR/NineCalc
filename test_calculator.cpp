@@ -276,4 +276,10 @@ int main()
 		assert(result.value.integer == 461);
 		assert(result.value.integer != 459);
 	} end_test;
+
+	begin_test {
+		f64 value = 1.2345;
+		String result = convert_f64_to_string(&arena, value);
+		assert(strings_are_equal(result, make_string_from_chars(&arena, "1.2345")));
+	} end_test;
 }

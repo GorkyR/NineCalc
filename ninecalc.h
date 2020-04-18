@@ -34,7 +34,7 @@ struct State
 	Font loaded_font;
 	String text;
 	
-	u32 cursor_position;
+	u64 cursor_position;
 
 	u32 caret_x;
 	u32 caret_width;
