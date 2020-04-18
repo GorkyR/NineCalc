@@ -296,3 +296,49 @@ String convert_f64_to_string(Memory *arena, f64 value)
 
 	return(result);
 }
+
+String concatenate(Memory *arena, String a, String b)
+{
+	String concatenation = make_string(arena, a.length + b.length);
+	concatenation.length = concatenation.capacity;
+	for (u64 i = 0; i < a.length; i++)
+		concatenation[i] = a[i];
+	for (u64 i = 0; i < b.length; i++)
+		concatenation[i + a.length] = b[i];
+	return(concatenation);
+}
+
+void insert(String *into, u32 character, u64 at)
+{
+	assert(into->capacity > into->length + 1); // it should fit
+	assert(at <= into->length);               // and be contiguous
+
+	for (u64 i = into->length, c = 0;
+		c < into->length - at; --i, ++c)
+	{
+		(*into)[i] = (*into)[into->length - c - 1];
+	}
+
+	(*into)[at] = character;
+
+	into->length += 1;
+}
+
+void insert(String *into, String other, u64 at)
+{
+	assert(into->capacity > (into->length + other.length)); // it should fit
+	assert(at <= into->length);                            // and be contiguous
+
+	for (u64 i = into->length + other.length - 1, c = 0;
+		c < into->length - at; --i, ++c)
+	{
+		(*into)[i] = (*into)[into->length - c - 1];
+	}
+
+	for (u64 i = 0; i < other.length; ++i)
+	{
+		(*into)[at + i] = other[i];
+	}
+
+	into->length += other.length;
+}

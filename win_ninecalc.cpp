@@ -197,9 +197,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 				} break;
 				case VK_RETURN:
 				{
-					state->text[state->cursor_position++] = '\n';
-					if (state->cursor_position > state->text.length)
-						state->text.length++;
+					insert(&state->text, '\n', state->cursor_position++);
 				} break;
 			}
 		} break;
@@ -210,14 +208,15 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 				result = true;
 			}
 			u32 character = (u32)wparam;
+
+			// If the codepoint is in the loaded font...
 			for (u64 i = 0; i < state->loaded_font.n_ranges; i++)
 			{
 				u32 *range = state->loaded_font.ranges[i];
 				if (character <= range[1] && character >= range[0])
 				{
-					state->text[state->cursor_position++] = character;
-					if (state->cursor_position > state->text.length)
-						state->text.length++;
+					// ...then write it.
+					insert(&state->text, character, state->cursor_position++);
 					break;
 				}
 			}
