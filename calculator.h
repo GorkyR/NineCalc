@@ -127,6 +127,24 @@ Token &Token_List::operator[](u64 index)
 	return(this->tokens[index]);
 }
 
+Token *tokenize_invalid(Memory *arena, String *text)
+{
+	Token *token = allocate_struct(arena, Token);
+	token->type = Token_Type::Invalid;
+
+	u32 offset = 0;
+	while (offset < text->length)
+	{
+		if (text->data[offset] == ' ')
+			break;
+		++offset;
+	}
+	token->text = substring(*text, 0, offset);
+
+	*text = substring(*text, offset);
+	return(token);
+}
+
 Token_List tokenize(Memory *arena, String text) {
 	Token_List token_list = {};
 	consume_whitespace(&text);
@@ -162,6 +180,10 @@ Token_List tokenize(Memory *arena, String text) {
 		else if (is_alphabetic(c) || (c == '_'))
 		{
 			token = tokenize_identifier(arena, &text);	
+		}
+		else
+		{
+			token = tokenize_invalid(arena, &text);
 		}
 		if (!token_list.count)
 			token_list.tokens = token;
