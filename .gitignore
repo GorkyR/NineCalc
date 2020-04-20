@@ -1,2 +1,5 @@
 build 
 run.bat
+test.cmd
+test_calculator.cpp
+debug.cmd

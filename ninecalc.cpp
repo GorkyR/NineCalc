@@ -1,5 +1,12 @@
 #include "ninecalc.h"
 
+#define array_count(array) (sizeof(array) / sizeof(array[0]))
+
+inline u64 kibibytes(u64 n) { return(n << 10); }
+inline u64 mebibytes(u64 n) { return(n << 20); }
+inline u64 gibibytes(u64 n) { return(n << 30); }
+inline u64 tebibytes(u64 n) { return(n << 40); }
+
 inline u32
 coloru8(u8 red, u8 green, u8 blue, u8 alpha = 255)
 {
@@ -191,7 +198,7 @@ draw_glyph(Canvas *graphics, Font *font, u32 codepoint, s32 left, s32 baseline, 
 }
 
 internal s32
-draw_text(Canvas *graphics, Font *font, String text, s32 x, s32 y, u32 color)
+draw_text(Canvas *graphics, Font *font, U32_String text, s32 x, s32 y, u32 color)
 {
 	s32 offset = 0;
 	for (u64 i = 0; i < text.length; i++)
@@ -202,7 +209,7 @@ draw_text(Canvas *graphics, Font *font, String text, s32 x, s32 y, u32 color)
 }
 
 internal s32
-get_text_width(Font* font, String text, u64 cursor_position = 0, s32 *caret_offset = 0)
+get_text_width(Font* font, U32_String text, u64 cursor_position = 0, s32 *caret_offset = 0)
 {
 	u32 position = 0;
 	s32 span = 0;
@@ -219,7 +226,7 @@ get_text_width(Font* font, String text, u64 cursor_position = 0, s32 *caret_offs
 }
 
 internal u32
-get_current_line(String text, u64 cursor_position, u64 *offset_into_line = 0)
+get_current_line(U32_String text, u64 cursor_position, u64 *offset_into_line = 0)
 {
 	u64 last_line = 0;
 	u32 current_line = 0;
@@ -252,7 +259,7 @@ draw_bitmap(Canvas *canvas, Bitmap *bitmap, Bounding_Box box, Vec2 position)
     maximum(box.min.x, 0),
     maximum(box.min.y, 0)
   };
-  box.width  = minimum(box.width,  canvas.width  - box.position.x);
+  box->width  = minimum(box.width,  canvas->width  - box.position.x);
   box.height = minimum(box.height, canvas.height - box.position.y);
 
   Vec2 bitmap_min = {
@@ -288,3 +295,84 @@ draw_bitmap(Canvas *canvas, Bitmap *bitmap, Bounding_Box box, Vec2 position)
   }
 }*/
 
+void
+update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keyboard_Input *keyboard, Mouse_Input *mouse)
+{
+	State *state = (State*)arena->data;
+	Memory_Arena temp = Memory_Arena{ arena->data + sizeof(State), kibibytes(50) };
+
+	if (!arena->used)
+	{
+		allocate_struct(arena, State);
+		allocate_bytes(arena, temp.size);
+
+		state->loaded_font = platform->load_font(arena, "data/fira.ttf", 20);
+		state->text = make_empty_string(arena, kibibytes(1));
+		state->line_number_bar_width = 40;
+		state->caret_width = 1;
+	}
+
+	Font font = state->loaded_font;
+	s32 h_offset = state->line_number_bar_width;
+
+	// background
+	draw_rect(canvas, 0, 0, canvas->width, canvas->height, colorf32(1));
+
+	// line number sidebar
+	draw_rect(canvas, 0, 0, h_offset, canvas->height, colorf32(0.9f));
+
+	u32 current_line = get_current_line(state->text, state->cursor_position);
+
+	{ 	// line highlight
+		draw_rect(canvas,
+			h_offset     , current_line * font.line_height,
+			canvas->width, (current_line + 1) * font.line_height,
+			colorf32(0.95f));
+
+		// line number highlight
+		draw_rect(canvas,
+			0       , current_line * font.line_height,
+			h_offset, (current_line + 1) * font.line_height,
+			colorf32(0.85f));
+	}
+
+	// Write the usage code first!
+
+	U32_String_List lines = split_lines(&temp, state->text);
+
+	for (u64 i = 0; i < lines.count; i++)
+	{
+		U32_String line = lines[i];
+
+		s32 v_offset = (s32)(font.line_height * i + font.baseline_from_top);
+
+		if (i == current_line)
+		{
+			// caret
+			s32 caret_offset = 0;
+			get_text_width(&font, line, state->cursor_position - (u64)(line.data - state->text.data), &caret_offset);
+			draw_rect(canvas,
+				h_offset + caret_offset			     , current_line * font.line_height,
+				h_offset + caret_offset + state->caret_width, (current_line + 1) * font.line_height,
+				coloru8(0));
+		}
+
+		// line numbers ???
+		U32_String line_number = convert_s64_to_string(&temp, i+1);
+		s32 line_number_width = get_text_width(&font, line_number);
+		draw_text(canvas, &font, line_number,
+			h_offset - line_number_width, v_offset,
+			(i == current_line)? coloru8(0) : coloru8(0, 128));
+
+	    // line content
+		draw_text(canvas, &font, line, h_offset, v_offset, coloru8(0));
+
+		Result evaluation = evaluate(&temp, line);
+		if (evaluation.is_valid)
+		{
+			U32_String result = convert_f64_to_string(&temp, evaluation.value);
+			s32 result_width = get_text_width(&font, result);
+			draw_text(canvas, &font, result, canvas->width - result_width, v_offset, coloru8(0, 128));
+		}
+	}
+}

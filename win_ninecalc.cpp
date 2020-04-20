@@ -1,12 +1,29 @@
-#include "grs.h"
-#include "memory.h"
 #include "ninecalc.cpp"
-
 #include "stb_truetype.h"
+
 #include <windows.h>
 #include <stdio.h>
 
-#include "calculator.h"
+/*
+	@TODO:
+	- Calculator
+	  - Context
+	  	- Variables
+	  	- Functions (?)
+
+	- Editor
+	  - Scrolling!
+	  - Document structure
+	  - Mouse navigation
+	  - Copy/Paste
+	  - Copy result
+	  - Save .txt (with results)
+
+	  - Token formating?
+	  - Highlighting?
+*/
+
+
 
 struct WIN_Graphics
 {
@@ -18,23 +35,23 @@ struct WIN_Graphics
 global bool32 global_running  = true;
 global WIN_Graphics win_graphics;
 global State *state;
+global Mouse_Input mouse;
 
-internal Memory
+internal Memory_Arena
 win_allocate_memory(u64 size, u64 base = 0)
 {
-	Memory memory = {};
-	memory.contents = VirtualAlloc((LPVOID)base, size,
-		MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-	if (memory.contents)
+	Memory_Arena memory = {};
+	memory.data = (u8*)VirtualAlloc((LPVOID)base, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	if (memory.data)
 	{
 		memory.size = size;
 	}
 	return(memory);
 }
 internal void
-win_free_memory(Memory *memory)
+win_free_memory(Memory_Arena *memory)
 {
-	VirtualFree(memory->contents, 0, MEM_RELEASE);
+	VirtualFree(memory->data, 0, MEM_RELEASE);
 	*memory = {};
 }
 
@@ -118,7 +135,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			{
 				case VK_UP:
 				{
-					String text = state->text;
+					U32_String text = state->text;
 					u64 offset = 0;
 
 					u64 prev_line_start = 0, line_start = 0;
@@ -149,7 +166,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 				} break;
 				case VK_DOWN:
 				{
-					String text = state->text;
+					U32_String text = state->text;
 					u64 offset = 0;
 
 					u64 line_start = 0, next_line_start = 0, next_line_end = text.length;
@@ -203,14 +220,14 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 				{
 					if (state->cursor_position > 0)
 					{
-						remove(&state->text, --state->cursor_position, 1);
+						remove_from_string(&state->text, --state->cursor_position, 1);
 					}
 				} break;
 				case VK_DELETE:
 				{
 					if (state->cursor_position < state->text.length)
 					{
-						remove(&state->text, state->cursor_position, 1);
+						remove_from_string(&state->text, state->cursor_position, 1);
 					}
 				} break;
 				case VK_HOME:
@@ -245,8 +262,8 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 		} break;
 		case WM_MOUSEMOVE:
 		{
-			state->mouse_x = (s16)(lparam & 0xffff);
-			state->mouse_y = (s16)((lparam >> 16) & 0xffff);
+			mouse.x = (s16)(lparam & 0xffff);
+			mouse.y = (s16)((lparam >> 16) & 0xffff);
 		} break;
 		default:
 		{
@@ -257,7 +274,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 }
 
 internal u8 *
-win_read_file(Memory *memory, char *file_path)
+win_read_file(Memory_Arena *memory, char *file_path)
 {
 	void *buffer = 0;
 
@@ -280,8 +297,8 @@ win_read_file(Memory *memory, char *file_path)
 	return((u8*)buffer);
 }
 
-internal Font 
-win_load_font(Memory *memory, char *ttf_filepath, u32 line_height)
+Font 
+win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 {
 	Font loaded_font = {};
 	// init line_height
@@ -364,14 +381,8 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 		u64 memory_base = 0;
 	#endif
 
-	Memory memory = win_allocate_memory(mebibytes(5), memory_base);
-	state  = allocate_struct(&memory, State);
-	state->loaded_font = win_load_font(&memory, "data/fira.ttf", 24);
-	state->text = make_string(&memory, kibibytes(1));
-	state->line_number_bar_width = 40;
-	state->caret_width = 1;
-
-	Memory temp = allocate_arena(&memory, kibibytes(50));
+	Memory_Arena memory = win_allocate_memory(mebibytes(5), memory_base);
+	state = (State*)memory.data;
 
 	WNDCLASSEX window_class = {};
 	window_class.cbSize = sizeof(window_class);
@@ -392,6 +403,8 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 
 		if (window)
 		{
+			Platform win_platform = {};
+			win_platform.load_font = win_load_font;
 
 			while (global_running)
 			{
@@ -402,93 +415,9 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 					DispatchMessage(&message);
 				}
 
-				Canvas canvas = win_graphics.canvas;
-				u32 width  = canvas.width;
-				u32 height = canvas.height;
-
-				u32 line_number_bar_width	= state->line_number_bar_width;
-				u32 caret_width			    = state->caret_width;
-				u64 cursor_position		    = state->cursor_position;
-
-				Font font = state->loaded_font;
-
-				s32 h_offset = state->line_number_bar_width;
-
-				// background
-				draw_rect(&canvas, 0, 0, width, height, colorf32(1));
-
-				// line number sidebar
-				draw_rect(&canvas, 0, 0, h_offset, height, colorf32(0.9f));
-
-				u32 current_line = get_current_line(state->text, state->cursor_position);
-
-				{ 	// line highlight
-					draw_rect(&canvas,
-						h_offset, current_line * font.line_height,
-						width 			     , (current_line + 1) * font.line_height,
-						colorf32(0.95f));
-
-					// line number highlight
-					draw_rect(&canvas,
-						0       , current_line * font.line_height,
-						h_offset, (current_line + 1) * font.line_height,
-						colorf32(0.85f));
-				}
-
-				// Write the usage code first!
-
-				String numbers[50];
-				for (u32 i = 1; i <= array_count(numbers); i++)
-				{
-					char buffer[3];
-					sprintf_s(&buffer[0], sizeof(buffer), "%d", i);
-					numbers[i - 1] = make_string_from_chars(&temp, &buffer[0]);
-				}
-
-				u64 n_lines;
-				String *lines = split_lines(&temp, state->text, &n_lines);
-
-				for (u64 i = 0; i < n_lines; i++)
-				{
-					String line = lines[i];
-
-					s32 v_offset = (s32)(font.line_height * i + font.baseline_from_top);
-
-					if (i == current_line)
-					{
-						// caret
-						s32 caret_offset = 0;
-						get_text_width(&font, line, cursor_position - (u64)(line.data - state->text.data), &caret_offset);
-						draw_rect(&canvas,
-							h_offset + caret_offset			     , current_line * font.line_height,
-							h_offset + caret_offset + caret_width, (current_line + 1) * font.line_height,
-							coloru8(0));
-					}
-
-					// line numbers ???
-					s32 line_number_width = get_text_width(&font, numbers[i]);
-					draw_text(&canvas, &font, numbers[i],
-						h_offset - line_number_width, v_offset,
-						(i == current_line)? coloru8(0) : coloru8(0, 128));
-
-                    // line content
-					draw_text(&canvas, &font, line, h_offset, v_offset, coloru8(0));
-
-					Result evaluation = evaluate(&temp, line);
-					if (evaluation.valid)
-					{
-						String result;
-						if (evaluation.type == Number_Type::Integer)
-							result = convert_s64_to_string(&temp, evaluation.value.integer);
-						else
-							result = convert_f64_to_string(&temp, evaluation.value.real);
-						s32 result_width = get_text_width(&font, result);
-						draw_text(&canvas, &font, result, width - result_width, v_offset, coloru8(0, 128));
-					}
-				}
-
+				update_and_render(&memory, &win_platform, &win_graphics.canvas, 0, &mouse);
+				
 				win_update_window(window, &win_graphics);
-				free_arena(temp);
 			}
 		}
 	}
