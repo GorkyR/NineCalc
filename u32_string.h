@@ -30,6 +30,7 @@ U32_String substring(U32_String text, u64 offset);
 U32_String_List split_lines(Memory_Arena *memory, U32_String text);
 
 U32_String convert_s64_to_string(Memory_Arena *arena, s64 value);
+U32_String convert_s64_to_string(Memory_Arena *arena, s64 value, bool32 negative);
 U32_String convert_f64_to_string(Memory_Arena *arena, f64 value);
 s64 parse_integer(U32_String text);
 f64 parse_float(U32_String text);
@@ -184,6 +185,30 @@ convert_s64_to_string(Memory_Arena *arena, s64 value)
 	return(result);
 }
 
+U32_String
+convert_s64_to_string(Memory_Arena *arena, s64 value, bool32 negative)
+{
+	U32_String result = {};
+	result.data = (u32*)((u8*)arena->data + arena->used);
+
+	if (negative) value = -value;
+	do
+	{
+		*allocate_struct(arena, u32) = (value % 10) + '0';
+		++result.length; ++result.capacity;
+		value /= 10;
+	} while (value);
+	if (negative)
+	{
+		*allocate_struct(arena, u32) = '-';
+		++result.length; ++result.capacity;
+	}
+
+	reverse_string_in_place(result);
+
+	return(result);
+}
+
 internal s16
 normalize_f64(f64 *value)
 {
@@ -286,7 +311,7 @@ convert_f64_to_string(Memory_Arena *arena, f64 value)
 	s16 exponent = normalize_f64(&value);
 
 	s64 integral_part = (s64)value;
-	U32_String integral_string = convert_s64_to_string(arena, (was_negative? -integral_part : integral_part));
+	U32_String integral_string = convert_s64_to_string(arena, was_negative? -integral_part : integral_part, was_negative);
 
 	s64 decimal_part = (s64)((value - integral_part) * 1e15 + 0.5);
 	u8 width = 15;

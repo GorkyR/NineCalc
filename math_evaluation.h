@@ -9,398 +9,430 @@ enum class Token_Type
 {
 	Invalid,
 	Number,
+	Variable,
 	Operator,
 	Parenthesis,
-	Identifier,
 	End
-};
-
-enum class Operator_Precedence
-{
-	Invalid,
-	Addition,
-	Subtraction,
-	Multiplication,
-	Division,
-	Exponentiation
 };
 
 struct Token
 {
 	Token_Type type;
 	U32_String text;
-	union 
-	{
-		Operator_Precedence precedence;
-	};
 };
 
 struct Token_List
 {
-	Token *tokens;
-	u32 count;
-
+	Token *data;
+	u64 count;
 	Token &operator[](u64 index);
+};
+
+enum class Precedence
+{
+	Invalid,
+	Addition,
+	Subtraction,
+	Multiplication,
+	Division,
+	Exponentiation,
+	Annex,
+	Parenthesis
 };
 
 struct AST
 {
 	Token token;
-	u32 consumed_tokens;
+	u32 consumed;
 	AST *left;
 	AST *right;
+	Precedence precedence;
+	bool32 invalid;
 };
 
 struct Result
 {
-	bool32 is_valid;
+	bool32 valid;
 	f64 value;
 };
 
-Token_List tokenize(Memory_Arena *arena, U32_String text);
-AST *parse(Memory_Arena *arena, Token_List tokens, u32, bool32);
-Result evaluate(AST node);
-Result evaluate(Memory_Arena *arena, U32_String expression);
+internal Token_List tokenize_expression(Memory_Arena*, U32_String);
+internal AST *parse_tokens(Memory_Arena*, Token_List);
+internal Result evaluate_tree(AST*);
+internal Result evaluate_expression(Memory_Arena*, U32_String);
 
-/////////////////////////////
+//--------------------------------------------------
 
 Token &Token_List::operator[](u64 index)
 {
-#if 0
-	assert(index < this->count);
-#else
-	index = (index >= this->count? this->count - 1 : index);
-#endif
-	return(this->tokens[index]);
+	if (index < this->count)
+		return(this->data[index]);
+	else
+		return(this->data[this->count - 1]);
 }
+
+internal bool32 is_whitespace(u32 codepoint) { return(codepoint == ' ' || codepoint == '\n' || codepoint == '\t' ); }
 
 internal void
-consume_whitespace(U32_String *text)
+consume_whitespace(U32_String *input)
 {
-	u32 offset = 0;
-	while (offset < text->length)
+	while (input->length && is_whitespace(*(input->data)))
 	{
-		u32 codepoint = (*text)[offset];
-		if (codepoint == ' ' || codepoint == '\t' || codepoint == '\n')
-			offset++;
-		else
-			break;
+		++(input->data);
+		--(input->length);
 	}
-	*text = substring(*text, offset);
 }
 
-internal inline bool32
-is_numeric(u32 codepoint)
+internal bool32 is_number(u32 codepoint) { return(codepoint >= '0' && codepoint <= '9'); }
+internal bool32 is_parenthesis(u32 codepoint) { return(codepoint == '(' || codepoint == ')'); }
+internal bool32
+is_letter(u32 codepoint)
 {
-	return(codepoint >= '0' && codepoint <= '9');
+	return((codepoint >= 'A' && codepoint <= 'Z') ||
+		   (codepoint >= 'a' && codepoint <= 'z'));
+}
+internal bool32
+starts_with_operator(U32_String input)
+{
+	return(input[0] == '+' ||
+		   input[0] == '-' ||
+		   input[0] == '*' ||
+		   input[0] == '/' ||
+		   input[0] == '^' ||
+		   input[0] == '!');
 }
 
-internal inline bool32
-is_alphabetic(u32 codepoint)
+internal bool32 is_valid_number(u32 codepoint)   { return(is_number(codepoint) || codepoint == '_' || codepoint == '.'); }
+internal bool32 is_valid_variable(u32 codepoint) { return(is_letter(codepoint) || is_number(codepoint) || codepoint == '_'); }
+
+internal Token
+consume_number_token(U32_String *input)
 {
-	return((codepoint >= 'A' && codepoint <= 'Z') || (codepoint >= 'a' && codepoint <= 'z'));
+	Token token = { Token_Type::Number };
+
+	bool32 has_decimal = false;
+	u64 i = 0;
+	while (i < input->length && is_valid_number(input->data[i]))
+	{
+		u32 codepoint = input->data[i];
+		if (codepoint == '.')
+		{
+			if (has_decimal)
+			{
+				token.type = Token_Type::Invalid;
+			}
+			has_decimal = true;
+		}
+		++i;
+	}
+	token.text = substring(*input, 0, i);
+	*input = substring(*input, i);
+
+	return token;
 }
 
-internal inline bool32
-is_legal_number_codepoint(u32 codepoint)
+internal Token
+consume_variable_token(U32_String *input)
 {
-	return(is_numeric(codepoint) || codepoint == '.' || codepoint == '_');
+	Token token = { Token_Type::Variable };
+
+	u64 i = 0;
+	while (i < input->length && is_valid_variable(input->data[i]))
+		++i;
+	token.text = substring(*input, 0, i);
+	*input = substring(*input, i);
+
+	return token;
 }
 
-internal inline bool32
-is_legal_identifier_codepoint(u32 codepoint)
+internal Token 
+consume_operator_token(U32_String *input)
 {
-	return(is_alphabetic(codepoint) || is_numeric(codepoint) || codepoint == '_');
+    Token token = { Token_Type::Operator };
+    // for now, all operators are one character, so...
+	token.text = substring(*input, 0, 1);
+	*input = substring(*input, 1);
+
+	return token;
+}
+
+internal Token 
+consume_parenthesis_token(U32_String *input)
+{
+    Token token = { Token_Type::Parenthesis };
+
+	token.text = substring(*input, 0, 1);
+	*input = substring(*input, 1);
+
+	return token;
+}
+
+internal Token 
+consume_invalid_token(U32_String *input)
+{
+	Token token = { Token_Type::Invalid };
+
+	u64 i = 0;
+	while (i < input->length && (*input)[i] != ' ')
+		++i;
+	token.text = substring(*input, 0, i);
+	*input = substring(*input, i);
+
+	return(token);
 }
 
 internal Token *
-tokenize_number(Memory_Arena *arena, U32_String *text)
+make_end_token(Memory_Arena *arena)
 {
 	Token *token = allocate_struct(arena, Token);
-	u32 offset = 0;
-	bool32 decimal = false;
-	bool32 invalid = false;
-	while (offset < text->length)
+	*token = Token{ Token_Type::End };
+	return(token);
+}
+
+internal Token_List
+tokenize_expression(Memory_Arena *arena, U32_String input)
+{
+	Token_List tokens = {};
+	tokens.data = cast_tail(arena, Token);
+
+	consume_whitespace(&input);
+	while (input.length)
 	{
-		u32 codepoint = (*text)[offset];
-		if (codepoint == '.')
-		{
-			if (!decimal)
-			{
-				decimal = true;
-			}
-			else
-			{
-				invalid = true;
-				break;
-			}
-		}
-		else if (is_alphabetic(codepoint))
-		{
-			invalid = true;
-		}
-		else if (!is_legal_number_codepoint(codepoint))
-		{
-			break;
-		}
-		++offset;
+		Token *token = allocate_struct(arena, Token);
+
+		if (is_number(input[0]) || input[0] == '.')
+			*token = consume_number_token(&input);
+		else if (is_letter(input[0]) || input[0] == '_')
+			*token = consume_variable_token(&input);
+		else if (starts_with_operator(input))
+			*token = consume_operator_token(&input);
+		else if (is_parenthesis(input[0]))
+			*token = consume_parenthesis_token(&input);
+		else
+			*token = consume_invalid_token(&input);
+
+		++tokens.count;
+
+		consume_whitespace(&input);
 	}
-	if ((*text)[offset - 1] == '.')
-		invalid = true;
-	if (invalid)
+	make_end_token(arena);
+	++tokens.count;
+
+	return(tokens);
+}
+
+bool32 is_number_or_variable(Token token) { return(token.type == Token_Type::Number || token.type == Token_Type::Variable); }
+bool32 is_open_parenthesis(Token token) { return(token.type == Token_Type::Parenthesis && token.text[0] == '('); }
+bool32 is_prefix_operator(Token token)
+{
+	// only '-' as a prefix operator so far
+	return(token.type == Token_Type::Operator && token.text[0] == '-');
+}
+bool32 is_suffix_operator(Token token)
+{
+	// only '!' as a sufix operator so far
+	return(token.type == Token_Type::Operator && token.text[0] == '!');
+}
+bool32 is_end_of_expression(Token token)
+{
+	return(token.type == Token_Type::End ||
+		   (token.type == Token_Type::Parenthesis &&
+		   	token.text[0] == ')'));
+}
+
+Token_List tokens_from(Token_List list, u64 offset)
+{
+	return(Token_List{ list.data + offset, list.count - offset });
+}
+
+AST *make_node(Memory_Arena *arena)
+{
+	AST *node = allocate_struct(arena, AST);
+	*node = {};
+	return(node);
+}
+
+AST *make_term_node(Memory_Arena *arena, Token token)
+{
+	AST *node = allocate_struct(arena, AST);
+	*node = { token, 1 };
+	return(node);
+}
+
+AST *make_operator_node(Memory_Arena *arena, Token token, AST *left)
+{
+	AST *node = allocate_struct(arena, AST);
+	*node = { token, left->consumed + 1, left };
+	return(node);
+}
+
+AST *make_operator_node(Memory_Arena *arena, Token token, AST *left, AST *right)
+{
+	AST *node = allocate_struct(arena, AST);
+	*node = { token, left->consumed + right->consumed + 1, left, right };
+	switch(token.text[0])
 	{
-		token->type = Token_Type::Invalid;
-		while ((*text)[offset] != ' ' && offset < text->length)
-			offset++;	
+		case '+': node->precedence = Precedence::Addition;        break;
+		case '-': node->precedence = Precedence::Subtraction;    break;
+		case '*': node->precedence = Precedence::Multiplication; break;
+		case '/': node->precedence = Precedence::Division;       break;
+		case '^': node->precedence = Precedence::Exponentiation; break;
+	}
+	return(node);
+}
+
+AST *parse_prefixed_term(Memory_Arena *arena, Token_List tokens)
+{
+	AST *term = 0;
+	if (is_number_or_variable(tokens[1]))
+		term = make_term_node(arena, tokens[1]);
+	else if (is_open_parenthesis(tokens[1]))
+	{
+		term = parse_tokens(arena, tokens_from(tokens, 2));
+		term->consumed += 2;
+		term->precedence = Precedence::Parenthesis;
+	}
+
+	AST* prefixed_term;
+	if (term)
+	{
+		prefixed_term = make_operator_node(arena, tokens[0], term);
+		prefixed_term->precedence = Precedence::Annex;
 	}
 	else
 	{
-		token->type = Token_Type::Number;
+		prefixed_term = make_term_node(arena, tokens[0]);
+		prefixed_term->invalid = true;
 	}
-	token->text = substring(*text, 0, offset);
-	*text = substring(*text, offset);
-	return(token);
+	return(prefixed_term);
 }
 
-internal Token *
-tokenize_identifier(Memory_Arena *arena, U32_String *text)
-{
-	Token *token = allocate_struct(arena, Token);
-	u32 offset = 0;
-	while (offset < text->length)
-	{
-		if (!is_legal_identifier_codepoint((*text)[offset]))
-			break;
-		offset++;
-	}
-	token->type = Token_Type::Identifier;
-	token->text = substring(*text, 0, offset);
-	*text = substring(*text, offset);
-	return(token);
-}
-
-internal Token *
-tokenize_invalid(Memory_Arena *arena, U32_String *text)
-{
-	Token *token = allocate_struct(arena, Token);
-	token->type = Token_Type::Invalid;
-
-	u32 offset = 0;
-	while (offset < text->length)
-	{
-		if (text->data[offset] == ' ')
-			break;
-		++offset;
-	}
-	token->text = substring(*text, 0, offset);
-
-	*text = substring(*text, offset);
-	return(token);
-}
-
-Token_List
-tokenize(Memory_Arena *arena, U32_String text)
-{
-	Token_List token_list = {};
-	consume_whitespace(&text);
-	while (text.length)
-	{
-		Token *token = 0;
-		u32 c = text[0];
-		if (is_numeric(c) || c == '.')
-		{
-			token = tokenize_number(arena, &text);
-		}
-		else if (c == '+' || c == '-' || c == '*' || c == '/' || c == '^')
-		{
-			token = allocate_struct(arena, Token);
-			token->type = Token_Type::Operator;
-			token->text = substring(text, 0, 1);
-			text = substring(text, 1);
-			switch(c) {
-				case '-': { token->precedence = Operator_Precedence::Subtraction   ; } break;
-				case '+': { token->precedence = Operator_Precedence::Addition      ; } break;
-				case '/': { token->precedence = Operator_Precedence::Division      ; } break;
-				case '*': { token->precedence = Operator_Precedence::Multiplication; } break;
-				case '^': { token->precedence = Operator_Precedence::Exponentiation; } break;
-			}
-		}
-		else if (c == '(' || c == ')')
-		{
-			token = allocate_struct(arena, Token);
-			token->type = Token_Type::Parenthesis;
-			token->text = substring(text, 0, 1);
-			text = substring(text, 1);
-		}
-		else if (is_alphabetic(c) || (c == '_'))
-		{
-			token = tokenize_identifier(arena, &text);	
-		}
-		else
-		{
-			token = tokenize_invalid(arena, &text);
-		}
-		if (!token_list.count)
-			token_list.tokens = token;
-		++token_list.count;
-		consume_whitespace(&text);
-	}
-	Token *token = allocate_struct(arena, Token);
-	token->type = Token_Type::End;
-	if (!token_list.count)
-		token_list.tokens = token;
-	++token_list.count;
-	return(token_list);
-}
-
-AST *
-parse(Memory_Arena *arena, Token_List tokens, u32 from = 0, bool32 in_parenthesis = false)
+AST *parse_tokens(Memory_Arena *arena, Token_List tokens)
 {
 	AST *node = 0;
+	if (tokens.count)
+	{
+		Token token = tokens[0];
 
-	Token token = tokens[from];
-	if (token.type == Token_Type::Number || token.type == Token_Type::Identifier)
-	{			
-		Token next_token = tokens[from + 1];
-		if (next_token.type == Token_Type::Operator)
+		if (is_number_or_variable(token))
+			node = make_term_node(arena, token);
+		else if (is_open_parenthesis(token))
 		{
-			node = allocate_struct(arena, AST);
-			*node = {};
+			node = parse_tokens(arena, tokens_from(tokens, 1));
+			node->consumed += 2;
+			node->precedence = Precedence::Parenthesis;
+		}
+		else if (is_prefix_operator(token))
+			node = parse_prefixed_term(arena, tokens);
+		else
+		{
+			if (!node)
+				node = make_node(arena);
+			node->invalid = true;
+		}
 
-			node->token = next_token;
+		token = tokens[node->consumed];
+		if (is_suffix_operator(token))
+		{
+			AST *left_node = node;
+			node = make_operator_node(arena, token, left_node);
+			node->precedence = Precedence::Annex;
+			token = tokens[node->consumed];
+		}
 
-			{
-				AST *left_node = allocate_struct(arena, AST);
-				*left_node = {};
-				left_node->token = token;
-				left_node->consumed_tokens = 1;
-
-				node->left = left_node;
-			}
-
-			node->right = parse(arena, tokens, from + 2, in_parenthesis);
-			node->consumed_tokens = 1 + node->left->consumed_tokens + node->right->consumed_tokens;
-
+		if (token.type == Token_Type::Operator)
+		{
+			AST *left_node = node;
+			node = make_operator_node(arena, token, left_node,
+				parse_tokens(arena, tokens_from(tokens, left_node->consumed + 1)));
+			// rotate tree to comply with order of operations
 			if (node->right->token.type == Token_Type::Operator &&
-				node->right->token.precedence <= node->token.precedence)
+				node->right->precedence <= node->precedence)
 			{
+				u32 consumed = node->consumed;
 				AST *node_right_left = node->right->left;
 				node->right->left = node;
 				node = node->right;
 				node->left->right = node_right_left;
+				node->consumed = consumed;
 			}
 		}
-		else if (next_token.type == Token_Type::Parenthesis)
+		else if (!is_end_of_expression(token))
 		{
-			if (in_parenthesis && next_token.text[0] == ')')
-			{
-				node = allocate_struct(arena, AST);
-				*node = {};
-
-				node->token = token;
-				node->consumed_tokens = 1;
-			}
-			else 
-			{
-				node = allocate_struct(arena, AST);
-				*node = {};
-			}
-		}
-		else
-		{
-			node = allocate_struct(arena, AST);
-			*node = {};
-
-			node->token = token;
-			node->consumed_tokens = 1;
+			if (!node)
+				node = make_node(arena);
+			node->invalid = true;
 		}
 	}
-	else if (token.type == Token_Type::Parenthesis)
-	{
-		if (token.text[0] == '(')
-		{
-			AST *parenthetical_node = parse(arena, tokens, from + 1, true);
-			from += parenthetical_node->consumed_tokens + 1;
-
-			Token next_token = tokens[from + 1];
-			if (next_token.type == Token_Type::Operator)
-			{
-				node = allocate_struct(arena, AST);
-				*node = {};
-
-				node->token = next_token;
-				node->left  = parenthetical_node;
-				node->right = parse(arena, tokens, from + 2, in_parenthesis);
-				node->consumed_tokens = 1 + node->left->consumed_tokens + 2 + node->right->consumed_tokens;
-			}
-			else
-			{
-				node = parenthetical_node;
-				node->consumed_tokens += 2;
-			}
-		}
-		else
-		{
-			node = allocate_struct(arena, AST);
-			*node = {};
-		}
-	}
-	else if (token.type == Token_Type::Operator)
-	{
-		// @TODO: Unary operators
-		if (token.text[0] == '-')
-		{
-			// @TODO: Unary negation
-			node = allocate_struct(arena, AST);
-			*node = {};
-		}
-	}
-	else
-	{
-		node = allocate_struct(arena, AST);
-		*node = {};
-	}
-
 	return(node);
 }
 
-Result
-evaluate(AST node)
+internal Result
+factorial(f64 input)
 {
 	Result result = {};
-	if (node.token.type == Token_Type::Number)
+	s64 number = (s64)input;
+	if (number >= 0)
 	{
-		result.is_valid = true;
-		result.value = parse_float(node.token.text);
-	}
-	else if (node.token.type == Token_Type::Operator)
-	{
-		Result res1 = evaluate(*node.left);
-		Result res2 = evaluate(*node.right);
-
-		if (res1.is_valid)
+		if (number < 2)
+			result = { true, 1 };
+		else
 		{
-			if (res2.is_valid)
+			f64 value = 1;
+			for (s64 i = 2; i <= number; ++i)
+				value *= i;
+			result = { true, value };
+		}
+	}
+	return(result);
+}
+
+internal Result
+evaluate_tree(AST *tree)
+{
+	Result result = {};
+	if (tree)
+	{
+		Token token = tree->token;
+		// @TODO: variables!
+		if (token.type == Token_Type::Number)
+		{
+			result.value = parse_float(token.text);
+			result.valid = true;
+		}
+		else if (token.type == Token_Type::Operator)
+		{
+			Result left_result = evaluate_tree(tree->left);
+			if (left_result.valid)
 			{
-				if (node.token.text[0] == '+')
-					result.value = res1.value + res2.value;
-				else if (node.token.text[0] == '-')
-					result.value = res1.value - res2.value;
-				else if (node.token.text[0] == '*')
-					result.value = res1.value * res2.value;
-				else if (node.token.text[0] == '/')
-					result.value = res1.value / res2.value;
-				else if (node.token.text[0] == '^')
-					result.value = pow(res1.value, res2.value);
-			
-				result.is_valid = true;
-			}
-			else
-			{
-				if (node.token.text[0] == '-')
+				Result right_result = evaluate_tree(tree->right);
+				if (right_result.valid)
 				{
-					result = res1;
-					result.value = -result.value;
+					if (token.text[0] == '+')
+						result.value = left_result.value + right_result.value;
+					else if (token.text[0] == '-')
+						result.value = left_result.value - right_result.value;
+					else if (token.text[0] == '*')
+						result.value = left_result.value * right_result.value;
+					else if (token.text[0] == '/')
+						result.value = left_result.value / right_result.value;
+					else if (token.text[0] == '^')
+						result.value = pow(left_result.value, right_result.value);
+					result.valid = true;
+				}
+				else
+				{
+					if (tree->precedence >= Precedence::Annex)
+					{
+						if (token.text[0] == '-') 
+						{
+							result = { true, -left_result.value };
+						}
+						else if (token.text[0] == '!')
+						{
+							result = factorial(left_result.value);
+						}
+					}
 				}
 			}
 		}
@@ -408,10 +440,11 @@ evaluate(AST node)
 	return(result);
 }
 
-Result
-evaluate(Memory_Arena *arena, U32_String text)
+internal Result
+evaluate_expression(Memory_Arena *arena, U32_String expression)
 {
-	Token_List tokens = tokenize(arena, text);
-	AST *node = parse(arena, tokens);
-	return(evaluate(*node));
+	Token_List tokens = tokenize_expression(arena, expression);
+	AST *tree = parse_tokens(arena, tokens);
+	Result result = evaluate_tree(tree);
+	return(result);
 }

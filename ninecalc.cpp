@@ -361,14 +361,14 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 		U32_String line_number = convert_s64_to_string(&temp, i+1);
 		s32 line_number_width = get_text_width(&font, line_number);
 		draw_text(canvas, &font, line_number,
-			h_offset - line_number_width, v_offset,
-			(i == current_line)? coloru8(0) : coloru8(0, 128));
+			h_offset - line_number_width - 5, v_offset,
+			(i == current_line)? coloru8(0, 200) : coloru8(0, 128));
 
 	    // line content
 		draw_text(canvas, &font, line, h_offset, v_offset, coloru8(0));
 
-		Result evaluation = evaluate(&temp, line);
-		if (evaluation.is_valid)
+		Result evaluation = evaluate_expression(&temp, line);
+		if (evaluation.valid)
 		{
 			U32_String result = convert_f64_to_string(&temp, evaluation.value);
 			s32 result_width = get_text_width(&font, result);

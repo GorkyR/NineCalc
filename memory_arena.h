@@ -13,6 +13,8 @@ internal void *allocate_bytes(Memory_Arena *arena, u64 size);
 #define allocate_array(arena, type, count) (type *)allocate_bytes(arena, sizeof(type) * count)
 #define allocate_arena(arena, size)        Memory_Arena{ allocate_bytes(arena, size), size, 0 }
 
+#define cast_tail(arena, type) (type *)(arena->data + arena->used)
+
 //////////////////////
 
 internal void *
