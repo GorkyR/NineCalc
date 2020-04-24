@@ -126,7 +126,8 @@ starts_with_operator(U32_String input)
 		   input[0] == '*' ||
 		   input[0] == '/' ||
 		   input[0] == '^' ||
-		   input[0] == '!');
+		   input[0] == '!' ||
+		   input[0] == '=');
 }
 
 internal bool32 is_valid_number(u32 codepoint)   { return(is_number(codepoint) || codepoint == '_' || codepoint == '.'); }
@@ -299,7 +300,7 @@ AST *make_operator_node(Memory_Arena *arena, Token token, AST *left, AST *right)
 	*node = { token, left->consumed + right->consumed + 1, left, right };
 	switch(token.text[0])
 	{
-		case '+': node->precedence = Precedence::Addition;        break;
+		case '+': node->precedence = Precedence::Addition;       break;
 		case '-': node->precedence = Precedence::Subtraction;    break;
 		case '*': node->precedence = Precedence::Multiplication; break;
 		case '/': node->precedence = Precedence::Division;       break;
@@ -421,46 +422,50 @@ evaluate_tree(AST *tree, Context *context)
 	if (tree)
 	{
 		Token token = tree->token;
-		// @TODO: variables!
 		if (token.type == Token_Type::Number)
-		{
 			result = { true, parse_float(token.text) };
-		}
 		else if (token.type == Token_Type::Variable)
-		{
 			result = (*context)[token.text];
-		}
 		else if (token.type == Token_Type::Operator)
 		{
-			Result left_result = evaluate_tree(tree->left, context);
-			if (left_result.valid)
+			if (token.text[0] == '=')
 			{
-				Result right_result = evaluate_tree(tree->right, context);
-				if (right_result.valid)
+				Token left_token = tree->left->token;
+				if (left_token.type == Token_Type::Variable)
 				{
-					if (token.text[0] == '+')
-						result.value = left_result.value + right_result.value;
-					else if (token.text[0] == '-')
-						result.value = left_result.value - right_result.value;
-					else if (token.text[0] == '*')
-						result.value = left_result.value * right_result.value;
-					else if (token.text[0] == '/')
-						result.value = left_result.value / right_result.value;
-					else if (token.text[0] == '^')
-						result.value = pow(left_result.value, right_result.value);
-					result.valid = true;
+					result = evaluate_tree(tree->right, context);
+					if (result.valid)
+						add_or_update_variable(context, left_token.text, result.value);
 				}
-				else
+			}
+			else
+			{
+				Result left_result = evaluate_tree(tree->left, context);
+				if (left_result.valid)
 				{
-					if (tree->precedence >= Precedence::Annex)
+					Result right_result = evaluate_tree(tree->right, context);
+					if (right_result.valid)
 					{
-						if (token.text[0] == '-') 
+						if (token.text[0] == '+')
+							result.value = left_result.value + right_result.value;
+						else if (token.text[0] == '-')
+							result.value = left_result.value - right_result.value;
+						else if (token.text[0] == '*')
+							result.value = left_result.value * right_result.value;
+						else if (token.text[0] == '/')
+							result.value = left_result.value / right_result.value;
+						else if (token.text[0] == '^')
+							result.value = pow(left_result.value, right_result.value);
+						result.valid = true;
+					}
+					else
+					{
+						if (tree->precedence >= Precedence::Annex)
 						{
-							result = { true, -left_result.value };
-						}
-						else if (token.text[0] == '!')
-						{
-							result = factorial(left_result.value);
+							if (token.text[0] == '-') 
+								result = { true, -left_result.value };
+							else if (token.text[0] == '!')
+								result = factorial(left_result.value);
 						}
 					}
 				}
