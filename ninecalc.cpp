@@ -1,5 +1,24 @@
 #include "ninecalc.h"
 
+/*
+	@TODO:
+	- Calculator
+	  - Context
+	  	- Variables
+	  	- Functions (?)
+
+	- Editor
+	  - Scrolling!
+	  - Document structure
+	  - Mouse navigation
+	  - Copy/Paste
+	  - Copy result
+	  - Save .txt (with results)
+
+	  - Token formating?
+	  - Highlighting?
+*/
+
 #define array_count(array) (sizeof(array) / sizeof(array[0]))
 
 inline u64 kibibytes(u64 n) { return(n << 10); }
@@ -339,6 +358,10 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 	// Write the usage code first!
 
 	U32_String_List lines = split_lines(&temp, state->text);
+	Context context = make_context(&temp, 100);
+
+	U32_String prev_var = make_string_from_chars(&temp, "prev");
+	U32_String sum_var  = make_string_from_chars(&temp, "sum");
 
 	for (u64 i = 0; i < lines.count; i++)
 	{
@@ -367,12 +390,15 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 	    // line content
 		draw_text(canvas, &font, line, h_offset, v_offset, coloru8(0));
 
-		Result evaluation = evaluate_expression(&temp, line);
+		Result evaluation = evaluate_expression(&temp, line, &context);
 		if (evaluation.valid)
 		{
 			U32_String result = convert_f64_to_string(&temp, evaluation.value);
 			s32 result_width = get_text_width(&font, result);
 			draw_text(canvas, &font, result, canvas->width - result_width, v_offset, coloru8(0, 128));
+
+			add_or_update_variable(&context, prev_var, evaluation.value);
+			add_or_update_variable(&context, sum_var, context[sum_var].value + evaluation.value);
 		}
 	}
 }

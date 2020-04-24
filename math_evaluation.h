@@ -24,7 +24,7 @@ struct Token
 struct Token_List
 {
 	Token *data;
-	u64 count;
+	u64   count;
 	Token &operator[](u64 index);
 };
 
@@ -42,26 +42,53 @@ enum class Precedence
 
 struct AST
 {
-	Token token;
-	u32 consumed;
-	AST *left;
-	AST *right;
+	Token      token;
+	u32        consumed;
+	AST        *left;
+	AST        *right;
 	Precedence precedence;
-	bool32 invalid;
+	bool32     invalid;
 };
 
 struct Result
 {
 	bool32 valid;
-	f64 value;
+	f64    value;
+};
+
+struct Context
+{
+	U32_String *variables;
+	f64        *values;
+	u64        count;
+	u64        capacity;
+
+	Result operator[](U32_String);
 };
 
 internal Token_List tokenize_expression(Memory_Arena*, U32_String);
 internal AST *parse_tokens(Memory_Arena*, Token_List);
-internal Result evaluate_tree(AST*);
-internal Result evaluate_expression(Memory_Arena*, U32_String);
+internal Result evaluate_tree(AST*, Context*);
+internal Result evaluate_expression(Memory_Arena*, U32_String, Context*);
+
+internal Context make_context(Memory_Arena *, u64);
+internal void add_or_update_variable(Context*, U32_String, f64);
 
 //--------------------------------------------------
+
+Result Context::operator[](U32_String variable)
+{
+	Result result = {};
+	for (u64 i = 0; i < this->count; ++i)
+	{
+		if (strings_are_equal(this->variables[i], variable))
+		{
+			result = { true, this->values[i] };
+			break;
+		}
+	}
+	return(result);
+}
 
 Token &Token_List::operator[](u64 index)
 {
@@ -388,7 +415,7 @@ factorial(f64 input)
 }
 
 internal Result
-evaluate_tree(AST *tree)
+evaluate_tree(AST *tree, Context *context)
 {
 	Result result = {};
 	if (tree)
@@ -397,15 +424,18 @@ evaluate_tree(AST *tree)
 		// @TODO: variables!
 		if (token.type == Token_Type::Number)
 		{
-			result.value = parse_float(token.text);
-			result.valid = true;
+			result = { true, parse_float(token.text) };
+		}
+		else if (token.type == Token_Type::Variable)
+		{
+			result = (*context)[token.text];
 		}
 		else if (token.type == Token_Type::Operator)
 		{
-			Result left_result = evaluate_tree(tree->left);
+			Result left_result = evaluate_tree(tree->left, context);
 			if (left_result.valid)
 			{
-				Result right_result = evaluate_tree(tree->right);
+				Result right_result = evaluate_tree(tree->right, context);
 				if (right_result.valid)
 				{
 					if (token.text[0] == '+')
@@ -441,10 +471,40 @@ evaluate_tree(AST *tree)
 }
 
 internal Result
-evaluate_expression(Memory_Arena *arena, U32_String expression)
+evaluate_expression(Memory_Arena *arena, U32_String expression, Context *context)
 {
 	Token_List tokens = tokenize_expression(arena, expression);
 	AST *tree = parse_tokens(arena, tokens);
-	Result result = evaluate_tree(tree);
+	Result result = evaluate_tree(tree, context);
 	return(result);
+}
+
+void add_or_update_variable(Context *context, U32_String variable, f64 value)
+{
+	bool32 existed = false;
+	for (u64 i = 0; i < context->count; ++i)
+	{
+		if (strings_are_equal(context->variables[i], variable))
+		{
+			context->values[i] = value;
+			existed = true;
+			break;
+		}
+	}
+	if (!existed)
+	{
+		assert(context->count < context->capacity);
+		context->variables[context->count] = variable;
+		context->values[context->count] = value;
+		++context->count;
+	}
+}
+
+Context make_context(Memory_Arena *arena, u64 capacity)
+{
+	Context context = {};
+	context.variables = allocate_array(arena, U32_String, capacity);
+	context.values    = allocate_array(arena, f64, capacity);
+	context.capacity  = capacity;
+	return(context);
 }

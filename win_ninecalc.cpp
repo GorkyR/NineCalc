@@ -4,27 +4,6 @@
 #include <windows.h>
 #include <stdio.h>
 
-/*
-	@TODO:
-	- Calculator
-	  - Context
-	  	- Variables
-	  	- Functions (?)
-
-	- Editor
-	  - Scrolling!
-	  - Document structure
-	  - Mouse navigation
-	  - Copy/Paste
-	  - Copy result
-	  - Save .txt (with results)
-
-	  - Token formating?
-	  - Highlighting?
-*/
-
-
-
 struct WIN_Graphics
 {
 	BITMAPINFO bitmap_info;
