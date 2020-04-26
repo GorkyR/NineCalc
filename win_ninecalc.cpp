@@ -101,123 +101,111 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			u32 height = client_rect.bottom - client_rect.top;
 			win_resize_backbuffer(&win_graphics, width, height);
 		} break;
-		case WM_PAINT:
+		/*case WM_PAINT:
 		{
 			PAINTSTRUCT paint;
 			HDC device_context = BeginPaint(window, &paint);
 			win_update_window(window, device_context, &win_graphics);
 			EndPaint(window, &paint);
-		} break;
+		} break;*/
 		case WM_KEYDOWN:
 		{
 			switch (wparam)
 			{
 				case VK_UP:
 				{
-					U32_String text = state->text;
-					u64 offset = 0;
-
-					u64 prev_line_start = 0, line_start = 0;
-					bool32 is_first_line = true;
-					for (u64 i = 0; i < text.length; i++)
+					if (state->cursor_line > 0)
 					{
-						if (i == state->cursor_position)
-						{
-							offset = i - line_start;
-							break;
-						}
-						if (text[i] == '\n')
-						{
-							prev_line_start = line_start;
-							line_start = i + 1;
-							is_first_line = false;
-						}
-					}
-					if (state->cursor_position == text.length)
-					{
-						offset = text.length - line_start;
-					}
-
-					if (!is_first_line)
-					{
-						state->cursor_position = minimum(prev_line_start + offset, line_start - 1);
+						--state->cursor_line;
+						state->cursor_offset_into_line = minimum(
+							state->cursor_offset_into_line,
+							state->document.lines[state->cursor_line].length);
 					}
 				} break;
 				case VK_DOWN:
 				{
-					U32_String text = state->text;
-					u64 offset = 0;
-
-					u64 line_start = 0, next_line_start = 0, next_line_end = text.length;
-					bool32 current_line_found = false, next_line_found = false;
-					bool32 is_last_line = true;
-					for (u64 i = 0; i < text.length; i++)
+					if ((state->cursor_line + 1) < state->document.line_count)
 					{
-						if (i == state->cursor_position)
-						{
-							current_line_found = true;
-							offset = i - line_start;
-						}
-						if (text[i] == '\n')
-						{
-							if (current_line_found)
-							{
-								if (next_line_found)
-								{
-									next_line_end = i + 1;
-									break;
-								}
-								next_line_start = i + 1;
-								is_last_line = false;
-								next_line_found = true;
-							}
-							else
-							{
-								line_start = i + 1;
-							}
-						}
-					}
-
-					if (!is_last_line)
-					{
-						state->cursor_position = minimum(next_line_start + offset, next_line_end);
+						++state->cursor_line;
+						state->cursor_offset_into_line = minimum(
+							state->cursor_offset_into_line,
+							state->document.lines[state->cursor_line].length);
 					}
 				} break;/**/
 				case VK_RIGHT:
 				{
-					state->cursor_position = minimum(state->cursor_position + 1, (s32)state->text.length);
+					if (state->cursor_offset_into_line == state->document.lines[state->cursor_line].length)
+					{
+						if ((state->cursor_line + 1) < state->document.line_count)
+						{
+							++state->cursor_line;
+							state->cursor_offset_into_line = 0;
+						}
+					}
+					else
+					{
+						++state->cursor_offset_into_line;
+					}
 				} break;
 				case VK_LEFT:
 				{
-					state->cursor_position = maximum(state->cursor_position - 1, 0);
+					if (state->cursor_offset_into_line == 0)
+					{
+						if (state->cursor_line != 0)
+						{
+							--state->cursor_line;
+							state->cursor_offset_into_line = state->document.lines[state->cursor_line].length;
+						}
+					}
+					else
+					{
+						--state->cursor_offset_into_line;
+					}
 				} break;
 				case VK_RETURN:
 				{
-					insert_character_if_fits(&state->text, '\n', state->cursor_position++);
+					insert_character_if_fits(&state->document.buffer, '\n',
+						(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_offset_into_line);
+					recalculate_lines(&state->document);
+					++state->cursor_line;
+					state->cursor_offset_into_line = 0;
 				} break;
 				case VK_BACK:
 				{
-					if (state->cursor_position > 0)
+					if (state->cursor_offset_into_line > 0 || state->cursor_line > 0)
 					{
-						remove_from_string(&state->text, --state->cursor_position, 1);
+						remove_from_string(&state->document.buffer,
+							(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_offset_into_line - 1, 1);
+						recalculate_lines(&state->document);
+						if (state->cursor_offset_into_line == 0)
+						{
+							--state->cursor_line;
+							state->cursor_offset_into_line = state->document.lines[state->cursor_line].length;
+						}
+						else
+							--state->cursor_offset_into_line;
 					}
 				} break;
 				case VK_DELETE:
 				{
-					if (state->cursor_position < state->text.length)
+					if (state->cursor_offset_into_line < state->document.lines[state->cursor_line].length ||
+						(state->cursor_line + 1) < state->document.line_count)
 					{
-						remove_from_string(&state->text, state->cursor_position, 1);
+						remove_from_string(&state->document.buffer,
+							(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_offset_into_line, 1);
+						recalculate_lines(&state->document);
 					}
 				} break;
 				case VK_HOME:
 				{
-					// @TODO
+					state->cursor_offset_into_line = 0;
 				} break;
 				case VK_END:
 				{
-					// @TODO
+					state->cursor_offset_into_line = state->document.lines[state->cursor_line].length;
 				} break;
 			}
+			recalculate_scroll(state, win_graphics.canvas.height);
 		} break;
 		case WM_UNICHAR:
 		case WM_CHAR:
@@ -228,13 +216,16 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			u32 character = (u32)wparam;
 
 			// If the codepoint is in the loaded font...
-			for (u64 i = 0; i < state->loaded_font.n_ranges; i++)
+			for (u64 i = 0; i < state->font.n_ranges; i++)
 			{
-				u32 *range = state->loaded_font.ranges[i];
+				u32 *range = state->font.ranges[i];
 				if (character <= range[1] && character >= range[0])
 				{
 					// ...then write it.
-					insert_character_if_fits(&state->text, character, state->cursor_position++);
+					insert_character_if_fits(&state->document.buffer, character,
+						(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_offset_into_line++);
+					recalculate_lines(&state->document);
+					recalculate_scroll(state, win_graphics.canvas.height);
 					break;
 				}
 			}
@@ -243,6 +234,13 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 		{
 			mouse.x = (s16)(lparam & 0xffff);
 			mouse.y = (s16)((lparam >> 16) & 0xffff);
+		} break;
+		case WM_MOUSEWHEEL:
+		{
+			persistent s16 scroll_distance = (s16)(state->font.line_height);
+			s16 wheel_delta = GET_WHEEL_DELTA_WPARAM(wparam) * scroll_distance / WHEEL_DELTA;
+			state->scroll_offset = (u32)clamp((s64)state->scroll_offset - wheel_delta,
+				0, (state->document.line_count - 1) * state->font.line_height);
 		} break;
 		default:
 		{

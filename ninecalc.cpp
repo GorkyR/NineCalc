@@ -3,13 +3,9 @@
 /*
 	@TODO:
 	- Calculator
-	  - Context
-	  	- Variables
 	  	- Functions (?)
 
 	- Editor
-	  - Scrolling!
-	  - Document structure
 	  - Mouse navigation
 	  - Copy/Paste
 	  - Copy result
@@ -110,8 +106,8 @@ draw_rect (Canvas *graphics, s32 min_x, s32 min_y, s32 max_x, s32 max_y, u32 col
 
 	u32 x_min = (u32)maximum(min_x, 0);
 	u32 y_min = (u32)maximum(min_y, 0);
-	u32 x_max = (u32)minimum(max_x, graphics->width);
-	u32 y_max = (u32)minimum(max_y, graphics->height);
+	u32 x_max = (u32)clamp(max_x, 0, graphics->width);
+	u32 y_max = (u32)clamp(max_y, 0, graphics->height);
 
 	u32 stride = graphics->width + x_min - x_max;
 	u32 *buffer = (u32*)graphics->buffer + y_min * graphics->width + x_min;
@@ -314,88 +310,126 @@ draw_bitmap(Canvas *canvas, Bitmap *bitmap, Bounding_Box box, Vec2 position)
   }
 }*/
 
+void recalculate_lines(Document *document)
+{
+	u64 i = 0;
+	u32 line = 0;
+	u64 line_start = 0;
+	U32_String *buffer = &document->buffer;
+	for (; i < buffer->length; i++)
+	{
+		if ((*buffer)[i] == '\n')
+		{
+			assert((line + 1) < document->line_capacity);
+
+			U32_String *doc_line = document->lines + line;
+			doc_line->data = buffer->data + line_start;
+			doc_line->capacity = buffer->capacity - line_start;
+			doc_line->length = i - line_start;
+
+			line_start = i + 1;
+			++line;
+		}
+	}
+	U32_String *doc_line = document->lines + line;
+	doc_line->data = buffer->data + line_start;
+	doc_line->capacity = buffer->capacity - line_start;
+	doc_line->length = i - line_start;
+
+	document->line_count = line + 1;
+}
+
+void recalculate_scroll(State *state, u32 height)
+{
+	u32 scroll_into_cursor = state->cursor_line * state->font.line_height;
+	if (scroll_into_cursor < state->scroll_offset)
+		state->scroll_offset = scroll_into_cursor;
+	else if ((scroll_into_cursor + state->font.line_height) >= state->scroll_offset + height)
+		state->scroll_offset = scroll_into_cursor + state->font.line_height - height;
+}
+
 void
 update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keyboard_Input *keyboard, Mouse_Input *mouse)
 {
 	State *state = (State*)arena->data;
-	Memory_Arena temp = Memory_Arena{ arena->data + sizeof(State), kibibytes(50) };
+	Memory_Arena temp = { arena->data + sizeof(State), kibibytes(50) };
 
 	if (!arena->used)
 	{
 		allocate_struct(arena, State);
 		allocate_bytes(arena, temp.size);
 
-		state->loaded_font = platform->load_font(arena, "data/fira.ttf", 20);
-		state->text = make_empty_string(arena, kibibytes(1));
-		state->line_number_bar_width = 40;
+		state->font = platform->load_font(arena, "data/fira.ttf", 20);
 		state->caret_width = 1;
+		state->line_number_bar_width = 40;
+
+		state->document.buffer = make_empty_string(arena, kibibytes(1));
+		state->document.line_capacity = 1024;
+		state->document.lines  = allocate_array(arena, U32_String, state->document.line_capacity);
+		recalculate_lines(&state->document);
 	}
 
-	Font font = state->loaded_font;
-	s32 h_offset = state->line_number_bar_width;
+	s32 horizontal_offset = state->line_number_bar_width;
 
 	// background
-	draw_rect(canvas, 0, 0, canvas->width, canvas->height, colorf32(1));
+	draw_rect(canvas, horizontal_offset, 0, canvas->width, canvas->height, colorf32(1));
 
 	// line number sidebar
-	draw_rect(canvas, 0, 0, h_offset, canvas->height, colorf32(0.9f));
+	draw_rect(canvas, 0, 0, horizontal_offset, canvas->height, colorf32(0.9f));
 
-	u32 current_line = get_current_line(state->text, state->cursor_position);
-
-	{ 	// line highlight
-		draw_rect(canvas,
-			h_offset     , current_line * font.line_height,
-			canvas->width, (current_line + 1) * font.line_height,
-			colorf32(0.95f));
-
-		// line number highlight
-		draw_rect(canvas,
-			0       , current_line * font.line_height,
-			h_offset, (current_line + 1) * font.line_height,
-			colorf32(0.85f));
-	}
-
-	// Write the usage code first!
-
-	U32_String_List lines = split_lines(&temp, state->text);
 	Context context = make_context(&temp, 100);
 
 	U32_String prev_var = make_string_from_chars(&temp, "prev");
 	U32_String sum_var  = make_string_from_chars(&temp, "sum");
 
-	for (u64 i = 0; i < lines.count; i++)
+	for (u64 i = 0; i < state->document.line_count; i++)
 	{
-		U32_String line = lines[i];
+		U32_String line = state->document.lines[i];
 
-		s32 v_offset = (s32)(font.line_height * i + font.baseline_from_top);
+		s32 vertical_offset = (s32)(state->font.line_height * i) - state->scroll_offset;
+		s32 baseline = vertical_offset + state->font.baseline_from_top;
 
-		if (i == current_line)
+		if (i == state->cursor_line)
 		{
+			{ 	// line highlight
+				draw_rect(canvas,
+					horizontal_offset,vertical_offset,
+					canvas->width,    vertical_offset + state->font.line_height,
+					colorf32(0.95f));
+
+				// line number highlight
+				draw_rect(canvas,
+					0, vertical_offset,
+					horizontal_offset, vertical_offset + state->font.line_height,
+					colorf32(0.85f));
+			}
+
 			// caret
 			s32 caret_offset = 0;
-			get_text_width(&font, line, state->cursor_position - (u64)(line.data - state->text.data), &caret_offset);
+			get_text_width(&state->font, line, state->cursor_offset_into_line, &caret_offset);
+			caret_offset += horizontal_offset;
 			draw_rect(canvas,
-				h_offset + caret_offset			     , current_line * font.line_height,
-				h_offset + caret_offset + state->caret_width, (current_line + 1) * font.line_height,
+				caret_offset, vertical_offset,
+				caret_offset + state->caret_width, vertical_offset + state->font.line_height,
 				coloru8(0));
 		}
 
 		// line numbers ???
 		U32_String line_number = convert_s64_to_string(&temp, i+1);
-		s32 line_number_width = get_text_width(&font, line_number);
-		draw_text(canvas, &font, line_number,
-			h_offset - line_number_width - 5, v_offset,
-			(i == current_line)? coloru8(0, 200) : coloru8(0, 128));
+		s32 line_number_width = get_text_width(&state->font, line_number);
+		draw_text(canvas, &state->font, line_number,
+			horizontal_offset - line_number_width - 5, baseline,
+			(i == state->cursor_line)? coloru8(0, 200) : coloru8(0, 128));
 
 	    // line content
-		draw_text(canvas, &font, line, h_offset, v_offset, coloru8(0));
+		draw_text(canvas, &state->font, line, horizontal_offset, baseline, coloru8(0));
 
 		Result evaluation = evaluate_expression(&temp, line, &context);
 		if (evaluation.valid)
 		{
 			U32_String result = convert_f64_to_string(&temp, evaluation.value);
-			s32 result_width = get_text_width(&font, result);
-			draw_text(canvas, &font, result, canvas->width - result_width, v_offset, coloru8(0, 128));
+			s32 result_width = get_text_width(&state->font, result);
+			draw_text(canvas, &state->font, result, canvas->width - result_width, baseline, coloru8(0, 128));
 
 			add_or_update_variable(&context, prev_var, evaluation.value);
 			add_or_update_variable(&context, sum_var, context[sum_var].value + evaluation.value);

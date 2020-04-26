@@ -24,17 +24,28 @@ struct Font
 	Glyph *glyphs;
 };
 
+struct Document
+{
+	U32_String buffer;
+	U32_String *lines;
+	u32 line_count;
+	u32 line_capacity;
+};
+
 struct State
 {
-	Font loaded_font;
-	U32_String text;
+	Font font;
 	
-	u64 cursor_position;
-
 	u32 caret_x;
 	u32 caret_width;
 
 	u32 line_number_bar_width;
+
+	Document document;
+	u32 cursor_line;
+	u64 cursor_offset_into_line;
+
+	u32 scroll_offset;
 };
 
 

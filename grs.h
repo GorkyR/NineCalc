@@ -39,3 +39,9 @@ inline s64 maximum(s64 a, s64 b)
 	s64 result = (a < b)? b : a;
 	return(result);
 }
+
+inline s64 clamp(s64 value, s64 min, s64 max)
+{
+	s64 result = (value < min)? min : ((value > max? max : value));
+	return(result);
+}
