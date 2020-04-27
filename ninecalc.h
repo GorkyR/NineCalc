@@ -89,10 +89,12 @@ struct Mouse_Input
 };
 
 typedef Font platform_load_font(Memory_Arena*, char*, u32);
+typedef bool32 platform_push_to_clipboard(U32_String);
 
 struct Platform
 {
-	platform_load_font *load_font;
+	platform_load_font         *load_font;
+	platform_push_to_clipboard *push_to_clipboard;
 };
 
 internal void update_and_render(Memory_Arena*, Platform*, Canvas*, Keyboard_Input*, Mouse_Input*);

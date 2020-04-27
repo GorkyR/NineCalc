@@ -16,12 +16,12 @@
 
 #define array_count(array) (sizeof(array) / sizeof(array[0]))
 
-inline u64 kibibytes(u64 n) { return(n << 10); }
-inline u64 mebibytes(u64 n) { return(n << 20); }
-inline u64 gibibytes(u64 n) { return(n << 30); }
-inline u64 tebibytes(u64 n) { return(n << 40); }
+internal inline u64 kibibytes(u64 n) { return(n << 10); }
+internal inline u64 mebibytes(u64 n) { return(n << 20); }
+internal inline u64 gibibytes(u64 n) { return(n << 30); }
+internal inline u64 tebibytes(u64 n) { return(n << 40); }
 
-inline u32
+internal inline u32
 coloru8(u8 red, u8 green, u8 blue, u8 alpha = 255)
 {
 	u32 color =
@@ -31,14 +31,14 @@ coloru8(u8 red, u8 green, u8 blue, u8 alpha = 255)
 		((u32)blue  <<  0);
 	return(color);
 }
-inline u32
+internal inline u32
 coloru8(u8 luminosity, u8 alpha = 255)
 {
 	u32 color = coloru8(luminosity, luminosity, luminosity, alpha);
 	return(color);
 }
 
-inline u32
+internal inline u32
 colorf32(f32 red, f32 green, f32 blue, f32 alpha = 1.0f)
 {
 	assert(red   <= 1.0f);
@@ -54,14 +54,14 @@ colorf32(f32 red, f32 green, f32 blue, f32 alpha = 1.0f)
 	return(color);
 }
 
-inline u32
+internal inline u32
 colorf32(f32 luminosity, f32 alpha = 1.0f)
 {
 	u32 color = colorf32(luminosity, luminosity, luminosity, alpha);
 	return color;
 }
 
-inline u32
+internal inline u32
 alpha_blend(u32 source, u32 destination)
 {
 	u32 result;
@@ -95,7 +95,7 @@ alpha_blend(u32 source, u32 destination)
 	return(result);
 }
 
-void
+internal void
 draw_rect (Canvas *graphics, s32 min_x, s32 min_y, s32 max_x, s32 max_y, u32 color)
 {
 	if (min_x > max_x)
@@ -119,7 +119,7 @@ draw_rect (Canvas *graphics, s32 min_x, s32 min_y, s32 max_x, s32 max_y, u32 col
 }
 
 
-void
+internal void
 draw_bitmap(Canvas *graphics, u32 *buffer, s32 left, s32 top, u32 width, u32 height)
 {
 	u32 min_x = (u32)maximum(left, 0);
@@ -150,7 +150,7 @@ draw_bitmap(Canvas *graphics, u32 *buffer, s32 left, s32 top, u32 width, u32 hei
 }
 
 
-Glyph *
+internal Glyph *
 get_glyph(Font *font, u32 codepoint)
 {
 	Glyph *glyph = 0;
@@ -167,7 +167,7 @@ get_glyph(Font *font, u32 codepoint)
 	return(glyph);
 }
 
-s32
+internal s32
 draw_glyph(Canvas *graphics, Font *font, u32 codepoint, s32 left, s32 baseline, u32 color)
 {
 	s32 advance = 0;
@@ -285,7 +285,8 @@ draw_bitmap(Canvas *canvas, Bitmap *bitmap, Bounding_Box box, Vec2 position)
   }
 }*/
 
-void recalculate_lines(Document *document)
+internal void
+recalculate_lines(Document *document)
 {
 	u64 i = 0;
 	u32 line = 0;
@@ -314,7 +315,8 @@ void recalculate_lines(Document *document)
 	document->line_count = line + 1;
 }
 
-void recalculate_scroll(State *state, u32 height)
+internal void
+recalculate_scroll(State *state, u32 height)
 {
 	u64 scroll_into_cursor = state->cursor_line * state->font.line_height;
 	if (scroll_into_cursor < state->scroll_offset)
@@ -338,14 +340,14 @@ get_cursor_position_from_offset(Font *font, U32_String line, s32 offset)
 	return(i);
 }
 
-inline internal void
+internal inline void
 clear_button(Input_Button *input)
 {
 	input->transitions = 0;
 }
 
-inline internal bool32
-is_or_was_clicked(Input_Button input)
+internal inline bool32
+clicked(Input_Button input)
 {
 	return(input.is_down || input.transitions > 1);
 }
@@ -417,10 +419,13 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 				coloru8(0));
 		}
 
-		if (is_or_was_clicked(mouse->left) && mouse->y >= vertical_offset && mouse->y < (s32)(vertical_offset + state->font.line_height))
+		if (clicked(mouse->left))
 		{
-			state->cursor_line = i;
-			state->cursor_position_in_line = get_cursor_position_from_offset(&state->font, line, (s32)maximum(mouse->x - horizontal_offset, 0));
+			if (mouse->y >= vertical_offset && mouse->y < (s32)(vertical_offset + state->font.line_height))
+			{
+				state->cursor_line = i;
+				state->cursor_position_in_line = get_cursor_position_from_offset(&state->font, line, (s32)maximum(mouse->x - horizontal_offset, 0));
+			}
 		}
 
 		// line numbers ???

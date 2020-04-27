@@ -380,6 +380,28 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 	return(loaded_font);
 }
 
+bool32
+win_push_to_clipboard(U32_String text)
+{
+	if (!OpenClipboard(0))
+		return(false);
+	EmptyClipboard();
+	HGLOBAL global_handle = GlobalAlloc(GMEM_MOVEABLE, text.length + 1);
+	if (!global_handle)
+	{
+		CloseClipboard();
+		return(false);
+	}
+	LPTSTR copied_string = (LPTSTR)GlobalLock(global_handle);
+	for (u64 i = 0; i < text.length; ++i)
+		copied_string[i] = (u8)text[i];
+	copied_string[text.length] = 0;
+	GlobalUnlock(global_handle);
+	SetClipboardData(CF_TEXT, global_handle);
+	CloseClipboard();
+	return(true);
+}
+
 int
 WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 {
@@ -413,7 +435,8 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 		if (window)
 		{
 			Platform win_platform = {};
-			win_platform.load_font = win_load_font;
+			win_platform.load_font         = win_load_font;
+			win_platform.push_to_clipboard = win_push_to_clipboard;
 
 			while (global_running)
 			{
