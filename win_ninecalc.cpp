@@ -81,6 +81,16 @@ win_update_window(HWND window, WIN_Graphics *graphics)
 	ReleaseDC(window, device_context);
 }
 
+internal void
+win_update_button(Input_Button *button, bool32 is_down)
+{
+	if (button->is_down != is_down)
+	{
+		++button->transitions;
+		button->is_down = is_down;
+	}
+}
+
 internal LRESULT
 win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
@@ -117,8 +127,8 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 					if (state->cursor_line > 0)
 					{
 						--state->cursor_line;
-						state->cursor_offset_into_line = minimum(
-							state->cursor_offset_into_line,
+						state->cursor_position_in_line = minimum(
+							state->cursor_position_in_line,
 							state->document.lines[state->cursor_line].length);
 					}
 				} break;
@@ -127,82 +137,84 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 					if ((state->cursor_line + 1) < state->document.line_count)
 					{
 						++state->cursor_line;
-						state->cursor_offset_into_line = minimum(
-							state->cursor_offset_into_line,
+						state->cursor_position_in_line = minimum(
+							state->cursor_position_in_line,
 							state->document.lines[state->cursor_line].length);
 					}
 				} break;/**/
 				case VK_RIGHT:
 				{
-					if (state->cursor_offset_into_line == state->document.lines[state->cursor_line].length)
+					if (state->cursor_position_in_line == state->document.lines[state->cursor_line].length)
 					{
 						if ((state->cursor_line + 1) < state->document.line_count)
 						{
 							++state->cursor_line;
-							state->cursor_offset_into_line = 0;
+							state->cursor_position_in_line = 0;
 						}
 					}
 					else
 					{
-						++state->cursor_offset_into_line;
+						++state->cursor_position_in_line;
 					}
 				} break;
 				case VK_LEFT:
 				{
-					if (state->cursor_offset_into_line == 0)
+					if (state->cursor_position_in_line == 0)
 					{
 						if (state->cursor_line != 0)
 						{
 							--state->cursor_line;
-							state->cursor_offset_into_line = state->document.lines[state->cursor_line].length;
+							state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
 						}
 					}
 					else
 					{
-						--state->cursor_offset_into_line;
+						--state->cursor_position_in_line;
 					}
 				} break;
 				case VK_RETURN:
 				{
 					insert_character_if_fits(&state->document.buffer, '\n',
-						(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_offset_into_line);
+						(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line);
 					recalculate_lines(&state->document);
 					++state->cursor_line;
-					state->cursor_offset_into_line = 0;
+					state->cursor_position_in_line = 0;
 				} break;
 				case VK_BACK:
 				{
-					if (state->cursor_offset_into_line > 0 || state->cursor_line > 0)
+					if (state->cursor_position_in_line > 0 || state->cursor_line > 0)
 					{
-						remove_from_string(&state->document.buffer,
-							(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_offset_into_line - 1, 1);
-						recalculate_lines(&state->document);
-						if (state->cursor_offset_into_line == 0)
+						u64 cursor_line = state->cursor_line;
+						u64 cursor_position_in_line = state->cursor_position_in_line;
+						if (state->cursor_position_in_line == 0)
 						{
 							--state->cursor_line;
-							state->cursor_offset_into_line = state->document.lines[state->cursor_line].length;
+							state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
 						}
 						else
-							--state->cursor_offset_into_line;
+							--state->cursor_position_in_line;
+						remove_from_string(&state->document.buffer,
+							(state->document.lines[cursor_line].data - state->document.buffer.data) + cursor_position_in_line - 1, 1);
+						recalculate_lines(&state->document);
 					}
 				} break;
 				case VK_DELETE:
 				{
-					if (state->cursor_offset_into_line < state->document.lines[state->cursor_line].length ||
+					if (state->cursor_position_in_line < state->document.lines[state->cursor_line].length ||
 						(state->cursor_line + 1) < state->document.line_count)
 					{
 						remove_from_string(&state->document.buffer,
-							(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_offset_into_line, 1);
+							(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line, 1);
 						recalculate_lines(&state->document);
 					}
 				} break;
 				case VK_HOME:
 				{
-					state->cursor_offset_into_line = 0;
+					state->cursor_position_in_line = 0;
 				} break;
 				case VK_END:
 				{
-					state->cursor_offset_into_line = state->document.lines[state->cursor_line].length;
+					state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
 				} break;
 			}
 			recalculate_scroll(state, win_graphics.canvas.height);
@@ -223,7 +235,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 				{
 					// ...then write it.
 					insert_character_if_fits(&state->document.buffer, character,
-						(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_offset_into_line++);
+						(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line++);
 					recalculate_lines(&state->document);
 					recalculate_scroll(state, win_graphics.canvas.height);
 					break;
@@ -231,9 +243,19 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			}
 		} break;
 		case WM_MOUSEMOVE:
+		case WM_LBUTTONDOWN:
+		case WM_RBUTTONDOWN:
+		case WM_MBUTTONDOWN:
+		case WM_LBUTTONUP:
+		case WM_RBUTTONUP:
+		case WM_MBUTTONUP:
 		{
 			mouse.x = (s16)(lparam & 0xffff);
 			mouse.y = (s16)((lparam >> 16) & 0xffff);
+
+			win_update_button(&mouse.left  , wparam & MK_LBUTTON);
+			win_update_button(&mouse.right , wparam & MK_RBUTTON);
+			win_update_button(&mouse.middle, wparam & MK_MBUTTON);
 		} break;
 		case WM_MOUSEWHEEL:
 		{
@@ -251,7 +273,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 }
 
 internal u8 *
-win_read_file(Memory_Arena *memory, char *file_path)
+win_read_file(char *file_path)
 {
 	void *buffer = 0;
 
@@ -261,7 +283,8 @@ win_read_file(Memory_Arena *memory, char *file_path)
 	  0, OPEN_EXISTING, 0, 0);
 
 	u32 file_size = GetFileSize(file, 0);
-	buffer = allocate_bytes(memory, file_size);
+	buffer = VirtualAlloc(0, file_size,
+		MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
 	u32 bytes_read;	
 	if (!ReadFile(file, buffer, file_size, (LPDWORD)&bytes_read, 0))
@@ -274,6 +297,12 @@ win_read_file(Memory_Arena *memory, char *file_path)
 	return((u8*)buffer);
 }
 
+internal void
+win_free_file(u8 *buffer)
+{
+	VirtualFree((void *)buffer, 0, MEM_RELEASE);
+}
+
 Font 
 win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 {
@@ -281,7 +310,7 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 	// init line_height
 	loaded_font.line_height = line_height;
 
-	u8* font_data = win_read_file(memory, ttf_filepath);
+	u8* font_data = win_read_file(ttf_filepath);
 
 	stbtt_fontinfo font;
 	stbtt_InitFont(&font, font_data, 0);
@@ -346,6 +375,8 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 		}
 	}
 
+	win_free_file(font_data);
+
 	return(loaded_font);
 }
 
@@ -367,6 +398,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 	window_class.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
 	window_class.hInstance = instance;
 	window_class.hIcon = 0;
+	window_class.hCursor = LoadCursor(0, IDC_IBEAM);
 	window_class.lpszClassName = "NineCalcClass";
 
 	if (RegisterClassEx(&window_class))

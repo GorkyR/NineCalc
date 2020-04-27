@@ -6,7 +6,6 @@
 	  	- Functions (?)
 
 	- Editor
-	  - Mouse navigation
 	  - Copy/Paste
 	  - Copy result
 	  - Save .txt (with results)
@@ -240,30 +239,6 @@ get_text_width(Font* font, U32_String text, u64 cursor_position = 0, s32 *caret_
 	return(span);
 }
 
-internal u32
-get_current_line(U32_String text, u64 cursor_position, u64 *offset_into_line = 0)
-{
-	u64 last_line = 0;
-	u32 current_line = 0;
-	for (u64 i = 0; i < text.length; i++)
-	{
-		if (cursor_position == i)
-		{
-			if (offset_into_line)
-				*offset_into_line = i - last_line - 1;
-			break;
-		}
-		if (text[i] == '\n')
-		{
-			last_line = i;
-			current_line++;
-		}
-	}
-	if (cursor_position == text.length && offset_into_line)
-		*offset_into_line = cursor_position - last_line - 1;
-	return(current_line);
-}
-
 /*internal void
 draw_bitmap(Canvas *canvas, Bitmap *bitmap, Bounding_Box box, Vec2 position)
 {
@@ -341,14 +316,41 @@ void recalculate_lines(Document *document)
 
 void recalculate_scroll(State *state, u32 height)
 {
-	u32 scroll_into_cursor = state->cursor_line * state->font.line_height;
+	u64 scroll_into_cursor = state->cursor_line * state->font.line_height;
 	if (scroll_into_cursor < state->scroll_offset)
 		state->scroll_offset = scroll_into_cursor;
 	else if ((scroll_into_cursor + state->font.line_height) >= state->scroll_offset + height)
 		state->scroll_offset = scroll_into_cursor + state->font.line_height - height;
 }
 
-void
+internal u64
+get_cursor_position_from_offset(Font *font, U32_String line, s32 offset)
+{
+	u64 i = 0;
+	s32 span = 0;
+	for (; i < line.length; i++)
+	{
+		Glyph* glyph = get_glyph(font, line[i]);
+		span += glyph->advance;
+		if (span > offset)
+			return(i);
+	}
+	return(i);
+}
+
+inline internal void
+clear_button(Input_Button *input)
+{
+	input->transitions = 0;
+}
+
+inline internal bool32
+is_or_was_clicked(Input_Button input)
+{
+	return(input.is_down || input.transitions > 1);
+}
+
+internal void
 update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keyboard_Input *keyboard, Mouse_Input *mouse)
 {
 	State *state = (State*)arena->data;
@@ -382,11 +384,12 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 	U32_String prev_var = make_string_from_chars(&temp, "prev");
 	U32_String sum_var  = make_string_from_chars(&temp, "sum");
 
+	// @TODO: clamp to visible area
 	for (u64 i = 0; i < state->document.line_count; i++)
 	{
 		U32_String line = state->document.lines[i];
 
-		s32 vertical_offset = (s32)(state->font.line_height * i) - state->scroll_offset;
+		s32 vertical_offset = (s32)(state->font.line_height * i - state->scroll_offset);
 		s32 baseline = vertical_offset + state->font.baseline_from_top;
 
 		if (i == state->cursor_line)
@@ -406,12 +409,18 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 
 			// caret
 			s32 caret_offset = 0;
-			get_text_width(&state->font, line, state->cursor_offset_into_line, &caret_offset);
+			get_text_width(&state->font, line, state->cursor_position_in_line, &caret_offset);
 			caret_offset += horizontal_offset;
 			draw_rect(canvas,
 				caret_offset, vertical_offset,
 				caret_offset + state->caret_width, vertical_offset + state->font.line_height,
 				coloru8(0));
+		}
+
+		if (is_or_was_clicked(mouse->left) && mouse->y >= vertical_offset && mouse->y < (s32)(vertical_offset + state->font.line_height))
+		{
+			state->cursor_line = i;
+			state->cursor_position_in_line = get_cursor_position_from_offset(&state->font, line, (s32)maximum(mouse->x - horizontal_offset, 0));
 		}
 
 		// line numbers ???
@@ -435,4 +444,6 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 			add_or_update_variable(&context, sum_var, context[sum_var].value + evaluation.value);
 		}
 	}
+
+	clear_button(&mouse->left);
 }

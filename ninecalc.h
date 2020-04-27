@@ -42,10 +42,10 @@ struct State
 	u32 line_number_bar_width;
 
 	Document document;
-	u32 cursor_line;
-	u64 cursor_offset_into_line;
+	u64 cursor_line;
+	u64 cursor_position_in_line;
 
-	u32 scroll_offset;
+	u64 scroll_offset;
 };
 
 
@@ -59,7 +59,7 @@ struct Canvas
 struct Input_Button
 {
 	bool32 is_down;
-	u32 half_transitions;
+	u32 transitions;
 };
 
 struct Keyboard_Input
@@ -95,4 +95,4 @@ struct Platform
 	platform_load_font *load_font;
 };
 
-void update_and_render(Memory_Arena*, Platform*, Canvas*, Keyboard_Input*, Mouse_Input*);
+internal void update_and_render(Memory_Arena*, Platform*, Canvas*, Keyboard_Input*, Mouse_Input*);
