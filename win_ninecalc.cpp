@@ -141,8 +141,10 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			else if (wparam == VK_HOME)   win_update_button(&keyboard.home     , key_is_down, true);
 			else if (wparam == VK_END)    win_update_button(&keyboard.end      , key_is_down, true);
 
-			if (wparam == 'C')
-				win_update_button(&keyboard.copy, key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
+			win_update_button(&keyboard.cut  , wparam == 'X' && key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
+			win_update_button(&keyboard.copy , wparam == 'C' && key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
+			win_update_button(&keyboard.paste, wparam == 'V' && key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
+			win_update_button(&keyboard.save , wparam == 'S' && key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
 		} break;
 		case WM_UNICHAR:
 		case WM_CHAR:
@@ -313,6 +315,27 @@ win_push_to_clipboard(UTF32_String text)
 	return(true);
 }
 
+UTF32_String
+win_pop_from_clipboard(Memory_Arena *arena)
+{
+	UTF32_String result = {};
+	if (OpenClipboard(0))
+	{
+		HGLOBAL global_handle = GetClipboardData(CF_TEXT);
+		if (global_handle)
+		{
+			LPTSTR clipboard_string = (LPTSTR)GlobalLock(global_handle);
+			if (clipboard_string)
+			{
+				result = make_string_from_chars(arena, clipboard_string);
+				GlobalUnlock(global_handle);
+			}
+		}
+		CloseClipboard();
+	}
+	return(result);
+}
+
 int
 WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 {
@@ -348,6 +371,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 			Platform win_platform = {};
 			win_platform.load_font         = win_load_font;
 			win_platform.push_to_clipboard = win_push_to_clipboard;
+			win_platform.pop_from_clipboard = win_pop_from_clipboard;
 
 			while (application_is_running)
 			{

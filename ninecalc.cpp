@@ -6,7 +6,7 @@
 	  	- Functions (?)
 
 	- Editor
-	  - Copy/Paste
+	  - Copy
 	  - Save .txt (with results)
 
 	  - Scrollbar?
@@ -478,6 +478,17 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 	bool32 should_snap_scroll = process_keyboard(state, keyboard);
 	if (should_snap_scroll)
 		recalculate_scroll(state, canvas->height);
+
+	if (button_was_pressed(keyboard->paste))
+	{
+		UTF32_String pasted = platform->pop_from_clipboard(arena);
+		insert_string_if_fits(&state->document.buffer, pasted,
+			(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line);
+		state->cursor_position_in_line += pasted.length;
+		arena->used -= pasted.length * sizeof(u32);
+		recalculate_lines(&state->document);
+		clear_button(&keyboard->paste);
+	}
 
 	s32 horizontal_offset = state->line_number_bar_width;
 

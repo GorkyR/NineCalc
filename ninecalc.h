@@ -74,7 +74,10 @@ struct Keyboard_Input
 	Input_Button home;
 	Input_Button end;
 
+	Input_Button cut;
 	Input_Button copy;
+	Input_Button paste;
+	Input_Button save;
 
 	UTF32_String input_buffer;
 };
@@ -89,13 +92,15 @@ struct Mouse_Input
 	Input_Button middle;
 };
 
-typedef Font platform_load_font(Memory_Arena*, char*, u32);
-typedef bool32 platform_push_to_clipboard(UTF32_String);
+typedef Font Platform_Load_Font(Memory_Arena*, char*, u32);
+typedef bool32 Platform_Push_To_Clipboard(UTF32_String);
+typedef UTF32_String Platform_Pop_From_Clipboard(Memory_Arena*);
 
 struct Platform
 {
-	platform_load_font         *load_font;
-	platform_push_to_clipboard *push_to_clipboard;
+	Platform_Load_Font          *load_font;
+	Platform_Push_To_Clipboard  *push_to_clipboard;
+	Platform_Pop_From_Clipboard *pop_from_clipboard;
 };
 
 internal void update_and_render(Memory_Arena*, Platform*, Canvas*, Keyboard_Input*, Mouse_Input*);
