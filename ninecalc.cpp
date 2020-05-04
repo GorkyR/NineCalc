@@ -3,7 +3,6 @@
 /*
 	@TODO:
 	- Calculator
-	  	- Remove decimal from integers
 	  	- Functions (?)
 
 	- Editor
