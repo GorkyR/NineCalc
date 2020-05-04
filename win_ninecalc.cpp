@@ -11,10 +11,12 @@ struct WIN_Graphics
 	Canvas canvas;
 };
 
-global bool32 global_running  = true;
+global bool32 application_is_running  = true;
 global WIN_Graphics win_graphics;
+
 global State *state;
 global Mouse_Input mouse;
+global Keyboard_Input keyboard;
 
 internal Memory_Arena
 win_allocate_memory(u64 size, u64 base = 0)
@@ -82,12 +84,17 @@ win_update_window(HWND window, WIN_Graphics *graphics)
 }
 
 internal void
-win_update_button(Input_Button *button, bool32 is_down)
+win_update_button(Input_Button *button, bool is_down, bool32 repeat_key = false)
 {
 	if (button->is_down != is_down)
 	{
 		++button->transitions;
 		button->is_down = is_down;
+	}
+	// repeat key counts as another press
+	else if (repeat_key && button->is_down && is_down)
+	{
+		button->transitions += 2;
 	}
 }
 
@@ -101,7 +108,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 		case WM_QUIT:
 		case WM_DESTROY:
 		{
-			global_running = false;
+			application_is_running = false;
 		} break;
 		case WM_SIZE:
 		{
@@ -119,128 +126,32 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			EndPaint(window, &paint);
 		} break;*/
 		case WM_KEYDOWN:
+		case WM_KEYUP:
 		{
-			switch (wparam)
-			{
-				case VK_UP:
-				{
-					if (state->cursor_line > 0)
-					{
-						--state->cursor_line;
-						state->cursor_position_in_line = minimum(
-							state->cursor_position_in_line,
-							state->document.lines[state->cursor_line].length);
-					}
-				} break;
-				case VK_DOWN:
-				{
-					if ((state->cursor_line + 1) < state->document.line_count)
-					{
-						++state->cursor_line;
-						state->cursor_position_in_line = minimum(
-							state->cursor_position_in_line,
-							state->document.lines[state->cursor_line].length);
-					}
-				} break;/**/
-				case VK_RIGHT:
-				{
-					if (state->cursor_position_in_line == state->document.lines[state->cursor_line].length)
-					{
-						if ((state->cursor_line + 1) < state->document.line_count)
-						{
-							++state->cursor_line;
-							state->cursor_position_in_line = 0;
-						}
-					}
-					else
-					{
-						++state->cursor_position_in_line;
-					}
-				} break;
-				case VK_LEFT:
-				{
-					if (state->cursor_position_in_line == 0)
-					{
-						if (state->cursor_line != 0)
-						{
-							--state->cursor_line;
-							state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
-						}
-					}
-					else
-					{
-						--state->cursor_position_in_line;
-					}
-				} break;
-				case VK_RETURN:
-				{
-					insert_character_if_fits(&state->document.buffer, '\n',
-						(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line);
-					recalculate_lines(&state->document);
-					++state->cursor_line;
-					state->cursor_position_in_line = 0;
-				} break;
-				case VK_BACK:
-				{
-					if (state->cursor_position_in_line > 0 || state->cursor_line > 0)
-					{
-						u64 cursor_line = state->cursor_line;
-						u64 cursor_position_in_line = state->cursor_position_in_line;
-						if (state->cursor_position_in_line == 0)
-						{
-							--state->cursor_line;
-							state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
-						}
-						else
-							--state->cursor_position_in_line;
-						remove_from_string(&state->document.buffer,
-							(state->document.lines[cursor_line].data - state->document.buffer.data) + cursor_position_in_line - 1, 1);
-						recalculate_lines(&state->document);
-					}
-				} break;
-				case VK_DELETE:
-				{
-					if (state->cursor_position_in_line < state->document.lines[state->cursor_line].length ||
-						(state->cursor_line + 1) < state->document.line_count)
-					{
-						remove_from_string(&state->document.buffer,
-							(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line, 1);
-						recalculate_lines(&state->document);
-					}
-				} break;
-				case VK_HOME:
-				{
-					state->cursor_position_in_line = 0;
-				} break;
-				case VK_END:
-				{
-					state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
-				} break;
-			}
-			recalculate_scroll(state, win_graphics.canvas.height);
+			bool key_was_down = (lparam & (1 << 30)) != 0;
+			bool key_is_down  = (lparam & (1 << 31)) == 0;
+
+			     if (wparam == VK_UP)     win_update_button(&keyboard.up       , key_is_down, true);
+			else if (wparam == VK_RIGHT)  win_update_button(&keyboard.right    , key_is_down, true);
+			else if (wparam == VK_DOWN)   win_update_button(&keyboard.down     , key_is_down, true);
+			else if (wparam == VK_LEFT)   win_update_button(&keyboard.left     , key_is_down, true);
+			else if (wparam == VK_RETURN) win_update_button(&keyboard.enter    , key_is_down, true);
+			else if (wparam == VK_BACK)   win_update_button(&keyboard.backspace, key_is_down, true);
+			else if (wparam == VK_DELETE) win_update_button(&keyboard.del      , key_is_down, true);
+			else if (wparam == VK_HOME)   win_update_button(&keyboard.home     , key_is_down, true);
+			else if (wparam == VK_END)    win_update_button(&keyboard.end      , key_is_down, true);
+
+			if (wparam == 'C')
+				win_update_button(&keyboard.copy, key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
 		} break;
 		case WM_UNICHAR:
 		case WM_CHAR:
 		{
-			if (wparam == UNICODE_NOCHAR) {
+			if (wparam == UNICODE_NOCHAR)
 				result = true;
-			}
 			u32 character = (u32)wparam;
-
-			// If the codepoint is in the loaded font...
-			for (u64 i = 0; i < state->font.n_ranges; i++)
-			{
-				u32 *range = state->font.ranges[i];
-				if (character <= range[1] && character >= range[0])
-				{
-					// ...then write it.
-					insert_character_if_fits(&state->document.buffer, character,
-						(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line++);
-					recalculate_lines(&state->document);
-					recalculate_scroll(state, win_graphics.canvas.height);
-					break;
-				}
-			}
+			if (codepoint_is_in_range(state->font, character))
+				insert_character_if_fits(&keyboard.input_buffer, character, keyboard.input_buffer.length);
 		} break;
 		case WM_MOUSEMOVE:
 		case WM_LBUTTONDOWN:
@@ -325,7 +236,7 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 
 	{ // init ranges
 		u32 ranges[][2] = { {32, 126} };
-		loaded_font.n_ranges = array_count(ranges);
+		loaded_font.range_count = array_count(ranges);
 		loaded_font.ranges = (u32 (*)[2])allocate_bytes(memory, sizeof(ranges));
 		for (u32 i = 0; i < sizeof(ranges) / 4; i++)
 		{
@@ -335,7 +246,7 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 
 	{ // init glyphs
 		u32 n_glyphs = 0;
-		for (u32 i = 0; i < loaded_font.n_ranges; i++)
+		for (u32 i = 0; i < loaded_font.range_count; i++)
 		{
 			u32 *range = loaded_font.ranges[i];
 			n_glyphs += range[1] - range[0] + 1;
@@ -344,7 +255,7 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 	}
 
 	u32 current_glyph = 0;
-	for (u32 j = 0; j < loaded_font.n_ranges; j++)
+	for (u32 j = 0; j < loaded_font.range_count; j++)
 	{
 		for (u32 i = loaded_font.ranges[j][0]; i <= loaded_font.ranges[j][1]; i++)
 		{
@@ -381,7 +292,7 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 }
 
 bool32
-win_push_to_clipboard(U32_String text)
+win_push_to_clipboard(UTF32_String text)
 {
 	if (!OpenClipboard(0))
 		return(false);
@@ -429,7 +340,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 			/*window title:*/ "NineCalc",
 			/*styles:*/ WS_OVERLAPPEDWINDOW | WS_VISIBLE /*| WS_VSCROLL/**/,
 			/*position:*/ CW_USEDEFAULT, CW_USEDEFAULT,
-			/*size:*/ 640, 480,
+			/*size:*/ 480, 360,
 			0, 0, instance, 0);
 
 		if (window)
@@ -438,7 +349,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 			win_platform.load_font         = win_load_font;
 			win_platform.push_to_clipboard = win_push_to_clipboard;
 
-			while (global_running)
+			while (application_is_running)
 			{
 				MSG message;
 				while (PeekMessage(&message, window, 0, 0, PM_REMOVE))
@@ -447,7 +358,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 					DispatchMessage(&message);
 				}
 
-				update_and_render(&memory, &win_platform, &win_graphics.canvas, 0, &mouse);
+				update_and_render(&memory, &win_platform, &win_graphics.canvas, &keyboard, &mouse);
 				
 				win_update_window(window, &win_graphics);
 			}

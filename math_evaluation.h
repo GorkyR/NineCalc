@@ -1,7 +1,7 @@
 #pragma once
 #include "grs.h"
 #include "memory_arena.h"
-#include "u32_string.h"
+#include "utf32_string.h"
 
 #include <cmath>
 
@@ -18,7 +18,7 @@ enum class Token_Type
 struct Token
 {
 	Token_Type type;
-	U32_String text;
+	UTF32_String text;
 };
 
 struct Token_List
@@ -58,25 +58,25 @@ struct Result
 
 struct Context
 {
-	U32_String *variables;
+	UTF32_String *variables;
 	f64        *values;
 	u64        count;
 	u64        capacity;
 
-	Result operator[](U32_String);
+	Result operator[](UTF32_String);
 };
 
-internal Token_List tokenize_expression(Memory_Arena*, U32_String);
+internal Token_List tokenize_expression(Memory_Arena*, UTF32_String);
 internal AST *parse_tokens(Memory_Arena*, Token_List);
 internal Result evaluate_tree(AST*, Context*);
-internal Result evaluate_expression(Memory_Arena*, U32_String, Context*);
+internal Result evaluate_expression(Memory_Arena*, UTF32_String, Context*);
 
 internal Context make_context(Memory_Arena *, u64);
-internal void add_or_update_variable(Context*, U32_String, f64);
+internal void add_or_update_variable(Context*, UTF32_String, f64);
 
 //--------------------------------------------------
 
-Result Context::operator[](U32_String variable)
+Result Context::operator[](UTF32_String variable)
 {
 	Result result = {};
 	for (u64 i = 0; i < this->count; ++i)
@@ -101,7 +101,7 @@ Token &Token_List::operator[](u64 index)
 internal bool32 is_whitespace(u32 codepoint) { return(codepoint == ' ' || codepoint == '\n' || codepoint == '\t' ); }
 
 internal void
-consume_whitespace(U32_String *input)
+consume_whitespace(UTF32_String *input)
 {
 	while (input->length && is_whitespace(*(input->data)))
 	{
@@ -119,7 +119,7 @@ is_letter(u32 codepoint)
 		   (codepoint >= 'a' && codepoint <= 'z'));
 }
 internal bool32
-starts_with_operator(U32_String input)
+starts_with_operator(UTF32_String input)
 {
 	return(input[0] == '+' ||
 		   input[0] == '-' ||
@@ -134,7 +134,7 @@ internal bool32 is_valid_number(u32 codepoint)   { return(is_number(codepoint) |
 internal bool32 is_valid_variable(u32 codepoint) { return(is_letter(codepoint) || is_number(codepoint) || codepoint == '_'); }
 
 internal Token
-consume_number_token(U32_String *input)
+consume_number_token(UTF32_String *input)
 {
 	Token token = { Token_Type::Number };
 
@@ -160,7 +160,7 @@ consume_number_token(U32_String *input)
 }
 
 internal Token
-consume_variable_token(U32_String *input)
+consume_variable_token(UTF32_String *input)
 {
 	Token token = { Token_Type::Variable };
 
@@ -174,7 +174,7 @@ consume_variable_token(U32_String *input)
 }
 
 internal Token 
-consume_operator_token(U32_String *input)
+consume_operator_token(UTF32_String *input)
 {
     Token token = { Token_Type::Operator };
     // for now, all operators are one character, so...
@@ -185,7 +185,7 @@ consume_operator_token(U32_String *input)
 }
 
 internal Token 
-consume_parenthesis_token(U32_String *input)
+consume_parenthesis_token(UTF32_String *input)
 {
     Token token = { Token_Type::Parenthesis };
 
@@ -196,7 +196,7 @@ consume_parenthesis_token(U32_String *input)
 }
 
 internal Token 
-consume_invalid_token(U32_String *input)
+consume_invalid_token(UTF32_String *input)
 {
 	Token token = { Token_Type::Invalid };
 
@@ -218,7 +218,7 @@ make_end_token(Memory_Arena *arena)
 }
 
 internal Token_List
-tokenize_expression(Memory_Arena *arena, U32_String input)
+tokenize_expression(Memory_Arena *arena, UTF32_String input)
 {
 	Token_List tokens = {};
 	tokens.data = cast_tail(arena, Token);
@@ -476,7 +476,7 @@ evaluate_tree(AST *tree, Context *context)
 }
 
 internal Result
-evaluate_expression(Memory_Arena *arena, U32_String expression, Context *context)
+evaluate_expression(Memory_Arena *arena, UTF32_String expression, Context *context)
 {
 	Token_List tokens = tokenize_expression(arena, expression);
 	AST *tree = parse_tokens(arena, tokens);
@@ -484,7 +484,7 @@ evaluate_expression(Memory_Arena *arena, U32_String expression, Context *context
 	return(result);
 }
 
-void add_or_update_variable(Context *context, U32_String variable, f64 value)
+void add_or_update_variable(Context *context, UTF32_String variable, f64 value)
 {
 	bool32 existed = false;
 	for (u64 i = 0; i < context->count; ++i)
@@ -508,7 +508,7 @@ void add_or_update_variable(Context *context, U32_String variable, f64 value)
 Context make_context(Memory_Arena *arena, u64 capacity)
 {
 	Context context = {};
-	context.variables = allocate_array(arena, U32_String, capacity);
+	context.variables = allocate_array(arena, UTF32_String, capacity);
 	context.values    = allocate_array(arena, f64, capacity);
 	context.capacity  = capacity;
 	return(context);

@@ -29,19 +29,16 @@ typedef u64 bool64;
 
 #define swap(a, b) { auto _ = a; a = b; b = _; }
 
-inline s64 minimum(s64 a, s64 b)
+internal inline s64 minimum(s64 a, s64 b)
 {
-	s64 result = (a < b)? a : b;
-	return(result);
+	return a < b? a : b;
 }
-inline s64 maximum(s64 a, s64 b)
+internal inline s64 maximum(s64 a, s64 b)
 {
-	s64 result = (a < b)? b : a;
-	return(result);
+	return a < b? b : a;
 }
 
-inline s64 clamp(s64 value, s64 min, s64 max)
+internal inline s64 clamp(s64 value, s64 min, s64 max)
 {
-	s64 result = (value < min)? min : ((value > max? max : value));
-	return(result);
+	return value < min? min : (value > max? max : value);
 }

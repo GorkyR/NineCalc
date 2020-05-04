@@ -3,13 +3,14 @@
 /*
 	@TODO:
 	- Calculator
+	  	- Remove decimal from integers
 	  	- Functions (?)
 
 	- Editor
 	  - Copy/Paste
-	  - Copy result
 	  - Save .txt (with results)
 
+	  - Scrollbar?
 	  - Token formating?
 	  - Highlighting?
 */
@@ -155,7 +156,7 @@ get_glyph(Font *font, u32 codepoint)
 {
 	Glyph *glyph = 0;
 	u32 glyph_offset = 0;
-	for (u32 i = 0; i < font->n_ranges; i++)
+	for (u32 i = 0; i < font->range_count; i++)
 	{
 		u32 *range = font->ranges[i];
 		if (codepoint >= range[0] && codepoint <= range[1])
@@ -212,7 +213,7 @@ draw_glyph(Canvas *graphics, Font *font, u32 codepoint, s32 left, s32 baseline, 
 }
 
 internal s32
-draw_text(Canvas *graphics, Font *font, U32_String text, s32 x, s32 y, u32 color)
+draw_text(Canvas *graphics, Font *font, UTF32_String text, s32 x, s32 y, u32 color)
 {
 	s32 offset = 0;
 	for (u64 i = 0; i < text.length; i++)
@@ -222,8 +223,20 @@ draw_text(Canvas *graphics, Font *font, U32_String text, s32 x, s32 y, u32 color
 	return(offset);
 }
 
+internal bool32
+codepoint_is_in_range(Font font, u32 codepoint)
+{
+	for (u64 i = 0; i < font.range_count; i++)
+	{
+		u32 *range = font.ranges[i];
+		if (codepoint <= range[1] && codepoint >= range[0])
+			return(true);
+	}
+	return(false);
+}
+
 internal s32
-get_text_width(Font* font, U32_String text, u64 cursor_position = 0, s32 *caret_offset = 0)
+get_text_width(Font* font, UTF32_String text, u64 cursor_position = 0, s32 *caret_offset = 0)
 {
 	u32 position = 0;
 	s32 span = 0;
@@ -239,66 +252,20 @@ get_text_width(Font* font, U32_String text, u64 cursor_position = 0, s32 *caret_
 	return(span);
 }
 
-/*internal void
-draw_bitmap(Canvas *canvas, Bitmap *bitmap, Bounding_Box box, Vec2 position)
-{
-  // all positions relative to the canvas
-
-  // clamp boinding box to canvas
-  box.position = {
-    maximum(box.min.x, 0),
-    maximum(box.min.y, 0)
-  };
-  box->width  = minimum(box.width,  canvas->width  - box.position.x);
-  box.height = minimum(box.height, canvas.height - box.position.y);
-
-  Vec2 bitmap_min = {
-    maximum(-(position.x - box.x), 0),
-    maximum(-(position.y - box.y), 0)
-  };
-
-  Vec2 canvas_min = {
-    maximum(position.x + bitmap_min.x, 0),
-    maximum(position.y + bitmap_min.y, 0)
-  };
-
-  canvas_offset = maximum(position.y + bitmap_min.y, 0) * canvas.width + maximum(position.x + bitmap_min.x, 0);
-  bitmap_offset = bitmap_min.y * bitmap.width + bitmap_min.x;
-
-  blit_width  = maximum(box.position.x + box.width  - position.x, 0) - bitmap_min.x;
-  blit_height = maximum(box.position.y + box.height - position.y, 0) - bitmap_min.y;
-
-  u32 *source      = bitmap.buffer + bitmap_offset;
-  u32 *destination = canvas.buffer + canvas_offset;
-
-  u32 source_step      = bitmap.width - blit_width;
-  u32 destination_step = canvas.width - blit_width;
-
-  for (u32 y = 0; y < blit_height; y++)
-  {
-    for (u32 x = 0; x < blit_width; x++)
-    {
-      *(destination++) = alpha_blend(*(source++), *destination);
-    }
-    source      += source_step;
-    destination += destination_step;
-  }
-}*/
-
 internal void
 recalculate_lines(Document *document)
 {
 	u64 i = 0;
 	u32 line = 0;
 	u64 line_start = 0;
-	U32_String *buffer = &document->buffer;
+	UTF32_String *buffer = &document->buffer;
 	for (; i < buffer->length; i++)
 	{
 		if ((*buffer)[i] == '\n')
 		{
 			assert((line + 1) < document->line_capacity);
 
-			U32_String *doc_line = document->lines + line;
+			UTF32_String *doc_line = document->lines + line;
 			doc_line->data = buffer->data + line_start;
 			doc_line->capacity = buffer->capacity - line_start;
 			doc_line->length = i - line_start;
@@ -307,7 +274,7 @@ recalculate_lines(Document *document)
 			++line;
 		}
 	}
-	U32_String *doc_line = document->lines + line;
+	UTF32_String *doc_line = document->lines + line;
 	doc_line->data = buffer->data + line_start;
 	doc_line->capacity = buffer->capacity - line_start;
 	doc_line->length = i - line_start;
@@ -326,7 +293,7 @@ recalculate_scroll(State *state, u32 height)
 }
 
 internal u64
-get_cursor_position_from_offset(Font *font, U32_String line, s32 offset)
+get_cursor_position_from_offset(Font *font, UTF32_String line, s32 offset)
 {
 	u64 i = 0;
 	s32 span = 0;
@@ -341,15 +308,149 @@ get_cursor_position_from_offset(Font *font, U32_String line, s32 offset)
 }
 
 internal inline void
-clear_button(Input_Button *input)
+clear_button(Input_Button *button)
 {
-	input->transitions = 0;
+	button->transitions = 0;
 }
 
 internal inline bool32
-clicked(Input_Button input)
+button_was_pressed(Input_Button button) // went from 'up' to 'down' at least once
 {
-	return(input.is_down || input.transitions > 1);
+	return(button.transitions > (u8)(button.is_down? 0 : 1));
+}
+
+internal bool32
+process_keyboard(State *state, Keyboard_Input *keyboard)
+{
+	bool32 should_snap_scroll = false;
+	if (button_was_pressed(keyboard->up))
+	{
+		if (state->cursor_line > 0)
+		{
+			--state->cursor_line;
+			state->cursor_position_in_line = minimum(
+				state->cursor_position_in_line,
+				state->document.lines[state->cursor_line].length);
+		}
+		should_snap_scroll = true;
+	}
+	if (button_was_pressed(keyboard->down))
+	{
+		if ((state->cursor_line + 1) < state->document.line_count)
+		{
+			++state->cursor_line;
+			state->cursor_position_in_line = minimum(
+				state->cursor_position_in_line,
+				state->document.lines[state->cursor_line].length);
+		}
+		should_snap_scroll = true;
+	}
+	if (button_was_pressed(keyboard->right))
+	{
+		if (state->cursor_position_in_line == state->document.lines[state->cursor_line].length)
+		{
+			if ((state->cursor_line + 1) < state->document.line_count)
+			{
+				++state->cursor_line;
+				state->cursor_position_in_line = 0;
+			}
+		}
+		else
+		{
+			++state->cursor_position_in_line;
+		}
+		should_snap_scroll = true;
+	}
+	if (button_was_pressed(keyboard->left))
+	{
+		if (state->cursor_position_in_line == 0)
+		{
+			if (state->cursor_line != 0)
+			{
+				--state->cursor_line;
+				state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
+			}
+		}
+		else
+		{
+			--state->cursor_position_in_line;
+		}
+		should_snap_scroll = true;
+	}
+
+	if (button_was_pressed(keyboard->enter))
+	{
+		insert_character_if_fits(&state->document.buffer, '\n',
+			(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line);
+		recalculate_lines(&state->document);
+		++state->cursor_line;
+		state->cursor_position_in_line = 0;
+		should_snap_scroll = true;
+	}
+	if (button_was_pressed(keyboard->backspace))
+	{
+		if (state->cursor_position_in_line > 0 || state->cursor_line > 0)
+		{
+			u64 cursor_line = state->cursor_line;
+			u64 cursor_position_in_line = state->cursor_position_in_line;
+			if (state->cursor_position_in_line == 0)
+			{
+				--state->cursor_line;
+				state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
+			}
+			else
+				--state->cursor_position_in_line;
+			remove_from_string(&state->document.buffer,
+				(state->document.lines[cursor_line].data - state->document.buffer.data) + cursor_position_in_line - 1, 1);
+			recalculate_lines(&state->document);
+		}
+		should_snap_scroll = true;
+	}
+	if (button_was_pressed(keyboard->del))
+	{
+		if (state->cursor_position_in_line < state->document.lines[state->cursor_line].length ||
+			(state->cursor_line + 1) < state->document.line_count)
+		{
+			remove_from_string(&state->document.buffer,
+				(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line, 1);
+			recalculate_lines(&state->document);
+		}
+		should_snap_scroll = true;
+	}
+	if (button_was_pressed(keyboard->home))
+	{
+		state->cursor_position_in_line = 0;
+		should_snap_scroll = true;
+	}
+	else if (button_was_pressed(keyboard->end))
+	{
+		state->cursor_position_in_line = state->document.lines[state->cursor_line].length;
+		should_snap_scroll = true;
+	}
+
+	if (keyboard->input_buffer.length)
+	{
+		insert_string_if_fits(&state->document.buffer, keyboard->input_buffer,
+			(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line);
+		state->cursor_position_in_line += keyboard->input_buffer.length;
+		keyboard->input_buffer.length = 0;
+		//insert_character_if_fits(&state->document.buffer, character,
+		//				(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line++);
+		recalculate_lines(&state->document);
+		should_snap_scroll = true;
+	}
+
+	clear_button(&keyboard->up);
+	clear_button(&keyboard->right);
+	clear_button(&keyboard->down);
+	clear_button(&keyboard->left);
+	clear_button(&keyboard->enter);
+	clear_button(&keyboard->backspace);
+	clear_button(&keyboard->del);
+	clear_button(&keyboard->home);
+	clear_button(&keyboard->end);
+
+	return(should_snap_scroll);
 }
 
 internal void
@@ -369,27 +470,32 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 
 		state->document.buffer = make_empty_string(arena, kibibytes(1));
 		state->document.line_capacity = 1024;
-		state->document.lines  = allocate_array(arena, U32_String, state->document.line_capacity);
+		state->document.lines  = allocate_array(arena, UTF32_String, state->document.line_capacity);
 		recalculate_lines(&state->document);
+
+		keyboard->input_buffer = make_empty_string(arena, 256);
 	}
+
+	bool32 should_snap_scroll = process_keyboard(state, keyboard);
+	if (should_snap_scroll)
+		recalculate_scroll(state, canvas->height);
 
 	s32 horizontal_offset = state->line_number_bar_width;
 
 	// background
 	draw_rect(canvas, horizontal_offset, 0, canvas->width, canvas->height, colorf32(1));
-
 	// line number sidebar
 	draw_rect(canvas, 0, 0, horizontal_offset, canvas->height, colorf32(0.9f));
 
 	Context context = make_context(&temp, 100);
 
-	U32_String prev_var = make_string_from_chars(&temp, "prev");
-	U32_String sum_var  = make_string_from_chars(&temp, "sum");
+	UTF32_String prev_var = make_string_from_chars(&temp, "prev");
+	UTF32_String sum_var  = make_string_from_chars(&temp, "sum");
 
 	// @TODO: clamp to visible area
 	for (u64 i = 0; i < state->document.line_count; i++)
 	{
-		U32_String line = state->document.lines[i];
+		UTF32_String line = state->document.lines[i];
 
 		s32 vertical_offset = (s32)(state->font.line_height * i - state->scroll_offset);
 		s32 baseline = vertical_offset + state->font.baseline_from_top;
@@ -419,7 +525,7 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 				coloru8(0));
 		}
 
-		if (clicked(mouse->left))
+		if (mouse->left.is_down)
 		{
 			if (mouse->y >= vertical_offset && mouse->y < (s32)(vertical_offset + state->font.line_height))
 			{
@@ -428,8 +534,8 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 			}
 		}
 
-		// line numbers ???
-		U32_String line_number = convert_s64_to_string(&temp, i+1);
+		// line numbers
+		UTF32_String line_number = convert_s64_to_string(&temp, i+1);
 		s32 line_number_width = get_text_width(&state->font, line_number);
 		draw_text(canvas, &state->font, line_number,
 			horizontal_offset - line_number_width - 5, baseline,
@@ -441,9 +547,19 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 		Result evaluation = evaluate_expression(&temp, line, &context);
 		if (evaluation.valid)
 		{
-			U32_String result = convert_f64_to_string(&temp, evaluation.value);
+			UTF32_String result = convert_f64_to_string(&temp, evaluation.value);
+			u32 result_color = coloru8(0, 128);
+
+			if (i == state->cursor_line)
+			{
+				if (keyboard->copy.is_down)
+					result_color = coloru8(100, 100, 255, 200);
+				if (button_was_pressed(keyboard->copy))
+					platform->push_to_clipboard(result);
+			}
+
 			s32 result_width = get_text_width(&state->font, result);
-			draw_text(canvas, &state->font, result, canvas->width - result_width, baseline, coloru8(0, 128));
+			draw_text(canvas, &state->font, result, canvas->width - result_width, baseline, result_color);
 
 			add_or_update_variable(&context, prev_var, evaluation.value);
 			add_or_update_variable(&context, sum_var, context[sum_var].value + evaluation.value);
@@ -451,4 +567,6 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 	}
 
 	clear_button(&mouse->left);
+	clear_button(&mouse->middle);
+	clear_button(&mouse->right);
 }

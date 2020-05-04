@@ -1,7 +1,7 @@
 #pragma once
 #include "grs.h"
 #include "memory_arena.h"
-#include "u32_string.h"
+#include "utf32_string.h"
 #include "math_evaluation.h"
 
 struct Glyph {
@@ -18,7 +18,7 @@ struct Font
 	u32 line_height;
 	u32 baseline_from_top;
 
-	u32 n_ranges;
+	u32 range_count;
 	u32 (*ranges)[2];
 
 	Glyph *glyphs;
@@ -26,8 +26,8 @@ struct Font
 
 struct Document
 {
-	U32_String buffer;
-	U32_String *lines;
+	UTF32_String buffer;
+	UTF32_String *lines;
 	u32 line_count;
 	u32 line_capacity;
 };
@@ -48,7 +48,6 @@ struct State
 	u64 scroll_offset;
 };
 
-
 struct Canvas
 {
 	u32 *buffer;
@@ -58,7 +57,7 @@ struct Canvas
 
 struct Input_Button
 {
-	bool32 is_down;
+	bool is_down;
 	u32 transitions;
 };
 
@@ -75,7 +74,9 @@ struct Keyboard_Input
 	Input_Button home;
 	Input_Button end;
 
-	U32_String buffered_input;
+	Input_Button copy;
+
+	UTF32_String input_buffer;
 };
 
 struct Mouse_Input
@@ -89,7 +90,7 @@ struct Mouse_Input
 };
 
 typedef Font platform_load_font(Memory_Arena*, char*, u32);
-typedef bool32 platform_push_to_clipboard(U32_String);
+typedef bool32 platform_push_to_clipboard(UTF32_String);
 
 struct Platform
 {
