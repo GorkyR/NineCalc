@@ -6,12 +6,13 @@
 	  	- Functions (?)
 
 	- Editor
-	  - Copy
-	  - Save .txt (with results)
+	  - Token highlighting
+	  - Token formating (?)
+	
+	  - Select & Copy
 
-	  - Scrollbar?
-	  - Token formating?
-	  - Highlighting?
+	  - Save .txt (with results (?)) (?)
+	  - Scrollbar (?)
 */
 
 #define array_count(array) (sizeof(array) / sizeof(array[0]))
@@ -41,10 +42,10 @@ coloru8(u8 luminosity, u8 alpha = 255)
 internal inline u32
 colorf32(f32 red, f32 green, f32 blue, f32 alpha = 1.0f)
 {
-	assert(red   <= 1.0f);
-	assert(green <= 1.0f);
-	assert(blue  <= 1.0f);
-	assert(alpha <= 1.0f);
+	assert(red   >= 0 && red   <= 1.0f);
+	assert(green >= 0 && green <= 1.0f);
+	assert(blue  >= 0 && blue  <= 1.0f);
+	assert(alpha >= 0 && alpha <= 1.0f);
 
 	u32 color = coloru8(
 		(u8)(red   * 255.0f),
@@ -306,12 +307,6 @@ get_cursor_position_from_offset(Font *font, UTF32_String line, s32 offset)
 	return(i);
 }
 
-internal inline void
-clear_button(Input_Button *button)
-{
-	button->transitions = 0;
-}
-
 internal inline bool32
 button_was_pressed(Input_Button button) // went from 'up' to 'down' at least once
 {
@@ -439,21 +434,11 @@ process_keyboard(State *state, Keyboard_Input *keyboard)
 		should_snap_scroll = true;
 	}
 
-	clear_button(&keyboard->up);
-	clear_button(&keyboard->right);
-	clear_button(&keyboard->down);
-	clear_button(&keyboard->left);
-	clear_button(&keyboard->enter);
-	clear_button(&keyboard->backspace);
-	clear_button(&keyboard->del);
-	clear_button(&keyboard->home);
-	clear_button(&keyboard->end);
-
 	return(should_snap_scroll);
 }
 
 internal void
-update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keyboard_Input *keyboard, Mouse_Input *mouse)
+update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Time_Input *time, Keyboard_Input *keyboard, Mouse_Input *mouse)
 {
 	State *state = (State*)arena->data;
 	Memory_Arena temp = { arena->data + sizeof(State), kibibytes(50) };
@@ -475,6 +460,7 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 		keyboard->input_buffer = make_empty_string(arena, 256);
 	}
 
+
 	bool32 should_snap_scroll = process_keyboard(state, keyboard);
 	if (should_snap_scroll)
 		recalculate_scroll(state, canvas->height);
@@ -487,7 +473,6 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 		state->cursor_position_in_line += pasted.length;
 		arena->used -= pasted.length * sizeof(u32);
 		recalculate_lines(&state->document);
-		clear_button(&keyboard->paste);
 	}
 
 	s32 horizontal_offset = state->line_number_bar_width;
@@ -503,12 +488,14 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 	UTF32_String sum_var  = make_string_from_chars(&temp, "sum");
 
 	// @TODO: clamp to visible area
-	for (u64 i = 0; i < state->document.line_count; i++)
+	u64 min = state->scroll_offset / state->font.line_height;
+	u64 max = minimum(min + canvas->height / state->font.line_height + 1, state->document.line_count);
+	for (u64 i = min; i < max; i++)
 	{
 		UTF32_String line = state->document.lines[i];
 
 		s32 vertical_offset = (s32)(state->font.line_height * i - state->scroll_offset);
-		s32 baseline = vertical_offset + state->font.baseline_from_top;
+		s32 baseline = vertical_offset + state->font.baseline;
 
 		if (i == state->cursor_line)
 		{
@@ -576,7 +563,66 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Keybo
 		}
 	}
 
-	clear_button(&mouse->left);
-	clear_button(&mouse->middle);
-	clear_button(&mouse->right);
+#if DEBUG
+	persistent s64 fps_history[100] = {};
+	persistent u64 fps_history_index = 0;
+
+	fps_history[fps_history_index++] = (s64)1e6 / time->delta;
+	fps_history_index %= array_count(fps_history);
+
+	s32 bar_width = canvas->width / array_count(fps_history);
+	s32 max_height = 0;
+	for (u64 i = 0; i < array_count(fps_history); ++i)
+	{
+		u64 it = (fps_history_index + i) % array_count(fps_history);
+		s64 fps_i = fps_history[it];
+		fps_i /= 2;
+		max_height = (s32)maximum(max_height, fps_i);
+		draw_rect(canvas,
+			(s32)(bar_width * i      ), canvas->height - (s32)fps_i,
+			(s32)(bar_width * (i + 1)), canvas->height - (s32)fps_i + 1,
+			colorf32(1, 0, 0));
+	}
+
+	const f64 fps_update_period_in_seconds = 0.5;
+	persistent s64 elapsed = 0;
+	persistent u32 frames  = 0;
+	persistent s64 fps     = 0;
+
+	++frames;
+	elapsed += time->delta;
+	const s64 fpsup_in_microseconds = (s64)(1e6 * fps_update_period_in_seconds);
+	const f64 fpsup_frequency = 1/fps_update_period_in_seconds;
+	if (elapsed >= fpsup_in_microseconds)
+	{
+		fps = (s64)(frames * 1/fps_update_period_in_seconds);
+		elapsed = elapsed - fpsup_in_microseconds;
+		frames  = 0;
+	}
+
+	persistent UTF32_String apprx_str = make_string_from_chars(arena, "~");
+	persistent UTF32_String unit_str  = make_string_from_chars(arena, " f/s");
+	UTF32_String fps_string = convert_s64_to_string(&temp, fps);
+
+	UTF32_String info_str = concatenate(&temp, apprx_str, concatenate(&temp, fps_string, unit_str));
+
+	s32 info_width = get_text_width(&state->font, info_str);
+	draw_text(canvas, &state->font, info_str,
+		canvas->width - info_width, canvas->height - max_height - state->font.line_height + state->font.baseline,
+		colorf32(1, 0, 0));
+
+	persistent UTF32_String label1 = make_string_from_chars(arena, "min i: ");
+	info_str = concatenate(&temp, label1, convert_s64_to_string(&temp, (s64)min));
+	info_width = get_text_width(&state->font, info_str);
+	draw_text(canvas, &state->font, info_str,
+		canvas->width - info_width, canvas->height - max_height - state->font.line_height * 3 + state->font.baseline,
+		colorf32(1, 0, 0));
+
+	persistent UTF32_String label2 = make_string_from_chars(arena, "max i: ");
+	info_str = concatenate(&temp, label2, convert_s64_to_string(&temp, (s64)max));
+	info_width = get_text_width(&state->font, info_str);
+	draw_text(canvas, &state->font, info_str,
+		canvas->width - info_width, canvas->height - max_height - state->font.line_height * 2 + state->font.baseline,
+		colorf32(1, 0, 0));
+#endif
 }

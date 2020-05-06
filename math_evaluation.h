@@ -127,7 +127,7 @@ starts_with_operator(UTF32_String input)
 		   input[0] == '/' ||
 		   input[0] == '^' ||
 		   input[0] == '!' ||
-		   input[0] == '=');
+		   input[0] == ':');
 }
 
 internal bool32 is_valid_number(u32 codepoint)   { return(is_number(codepoint) || codepoint == '_' || codepoint == '.'); }
@@ -428,7 +428,7 @@ evaluate_tree(AST *tree, Context *context)
 			result = (*context)[token.text];
 		else if (token.type == Token_Type::Operator)
 		{
-			if (token.text[0] == '=')
+			if (token.text[0] == ':')
 			{
 				Token left_token = tree->left->token;
 				if (left_token.type == Token_Type::Variable)

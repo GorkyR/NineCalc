@@ -16,7 +16,7 @@ struct Glyph {
 struct Font
 {
 	u32 line_height;
-	u32 baseline_from_top;
+	u32 baseline;
 
 	u32 range_count;
 	u32 (*ranges)[2];
@@ -92,6 +92,12 @@ struct Mouse_Input
 	Input_Button middle;
 };
 
+struct Time_Input
+{
+	s64 elapsed;
+	s64 delta;
+};
+
 typedef Font Platform_Load_Font(Memory_Arena*, char*, u32);
 typedef bool32 Platform_Push_To_Clipboard(UTF32_String);
 typedef UTF32_String Platform_Pop_From_Clipboard(Memory_Arena*);
@@ -103,4 +109,4 @@ struct Platform
 	Platform_Pop_From_Clipboard *pop_from_clipboard;
 };
 
-internal void update_and_render(Memory_Arena*, Platform*, Canvas*, Keyboard_Input*, Mouse_Input*);
+internal void update_and_render(Memory_Arena*, Platform*, Canvas*, Time_Input*, Keyboard_Input*, Mouse_Input*);

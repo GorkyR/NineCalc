@@ -12,11 +12,13 @@ struct WIN_Graphics
 };
 
 global bool32 application_is_running  = true;
+
 global WIN_Graphics win_graphics;
 
-global State *state;
-global Mouse_Input mouse;
+global State          *state;
+global Mouse_Input    mouse;
 global Keyboard_Input keyboard;
+global Time_Input     time;
 
 internal Memory_Arena
 win_allocate_memory(u64 size, u64 base = 0)
@@ -128,10 +130,15 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 		{
+			persistent bool control_key_is_down = false;
+
 			bool key_was_down = (lparam & (1 << 30)) != 0;
 			bool key_is_down  = (lparam & (1 << 31)) == 0;
 
-			     if (wparam == VK_UP)     win_update_button(&keyboard.up       , key_is_down, true);
+			if (wparam == VK_CONTROL)
+				control_key_is_down = key_is_down;
+
+			else if (wparam == VK_UP)     win_update_button(&keyboard.up       , key_is_down, true);
 			else if (wparam == VK_RIGHT)  win_update_button(&keyboard.right    , key_is_down, true);
 			else if (wparam == VK_DOWN)   win_update_button(&keyboard.down     , key_is_down, true);
 			else if (wparam == VK_LEFT)   win_update_button(&keyboard.left     , key_is_down, true);
@@ -141,10 +148,10 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			else if (wparam == VK_HOME)   win_update_button(&keyboard.home     , key_is_down, true);
 			else if (wparam == VK_END)    win_update_button(&keyboard.end      , key_is_down, true);
 
-			win_update_button(&keyboard.cut  , wparam == 'X' && key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
-			win_update_button(&keyboard.copy , wparam == 'C' && key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
-			win_update_button(&keyboard.paste, wparam == 'V' && key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
-			win_update_button(&keyboard.save , wparam == 'S' && key_is_down && HIWORD(GetKeyState(VK_CONTROL)));
+			else if (wparam == 'X') win_update_button(&keyboard.cut  , key_is_down && control_key_is_down);
+			else if (wparam == 'C') win_update_button(&keyboard.copy , key_is_down && control_key_is_down);
+			else if (wparam == 'V') win_update_button(&keyboard.paste, key_is_down && control_key_is_down);
+			else if (wparam == 'S') win_update_button(&keyboard.save , key_is_down && control_key_is_down);
 		} break;
 		case WM_UNICHAR:
 		case WM_CHAR:
@@ -230,10 +237,10 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 
 	f32 scale = stbtt_ScaleForPixelHeight(&font, (f32)line_height);
 
-	{ // init baseline_from_top
+	{ // init baseline
 		s32 temp_basline;
 		stbtt_GetFontVMetrics(&font, &temp_basline, 0, 0);
-		loaded_font.baseline_from_top = (u32)((f32)temp_basline * scale);
+		loaded_font.baseline = (u32)((f32)temp_basline * scale);
 	}
 
 	{ // init ranges
@@ -336,6 +343,71 @@ win_pop_from_clipboard(Memory_Arena *arena)
 	return(result);
 }
 
+internal inline void
+reset_button(Input_Button *button)
+{
+	button->transitions = 0;
+}
+
+internal inline void
+reset_keyboard_input(Keyboard_Input *input)
+{
+	reset_button(&input->up);
+	reset_button(&input->right);
+	reset_button(&input->down);
+	reset_button(&input->left);
+	reset_button(&input->enter);
+	reset_button(&input->backspace);
+	reset_button(&input->del);
+	reset_button(&input->home);
+	reset_button(&input->end);
+	reset_button(&input->cut);
+	reset_button(&input->copy);
+	reset_button(&input->paste);
+	reset_button(&input->save);
+	input->input_buffer.length = 0;
+}
+
+internal inline void
+reset_mouse_input(Mouse_Input *input)
+{
+	reset_button(&input->left);
+	reset_button(&input->right);
+	reset_button(&input->middle);
+}
+
+internal inline s64
+ticks_per_second()
+{
+	LARGE_INTEGER result;
+	QueryPerformanceFrequency(&result);
+	return(result.QuadPart);
+}
+
+global s64 ticks_per_microsecond = 0;
+
+internal inline s64
+current_tick()
+{
+	LARGE_INTEGER result;
+	QueryPerformanceCounter(&result);
+	return(result.QuadPart);
+}
+
+internal inline s64
+microseconds_elapsed(s64 start, s64 end)
+{
+	s64 microseconds = (end - start) / ticks_per_microsecond;
+	return(microseconds);
+}
+
+internal inline s64
+microseconds_elapsed_since(s64 start)
+{
+	s64 microseconds = microseconds_elapsed(start, current_tick());
+	return(microseconds);
+}
+
 int
 WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 {
@@ -373,6 +445,10 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 			win_platform.push_to_clipboard = win_push_to_clipboard;
 			win_platform.pop_from_clipboard = win_pop_from_clipboard;
 
+			ticks_per_microsecond = ticks_per_second() / 1000000;
+			s64 start_timestamp = current_tick();
+			s64 timestamp = start_timestamp;
+
 			while (application_is_running)
 			{
 				MSG message;
@@ -382,8 +458,18 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 					DispatchMessage(&message);
 				}
 
-				update_and_render(&memory, &win_platform, &win_graphics.canvas, &keyboard, &mouse);
-				
+				s64 end_timestamp = current_tick();
+				s64 delta_microseconds = microseconds_elapsed(timestamp, end_timestamp);
+				timestamp = end_timestamp;
+
+				time = {};
+				time.elapsed = microseconds_elapsed(start_timestamp, timestamp),
+				time.delta   = delta_microseconds;
+
+				update_and_render(&memory, &win_platform, &win_graphics.canvas, &time, &keyboard, &mouse);
+				reset_keyboard_input(&keyboard);
+				reset_mouse_input(&mouse);
+
 				win_update_window(window, &win_graphics);
 			}
 		}

@@ -415,10 +415,12 @@ parse_integer(UTF32_String text)
 	s64 result = 0;
 	for (u64 i = 0; i < text.length; i++)
 	{
-		result *= 10;
 		u32 codepoint = text[i];
-		if (codepoint >= '0' && codepoint <= '9')
+		if (codepoint >= '0' && codepoint <= '9') {
+			result *= 10;
 			result += codepoint - '0';
+		} else if (codepoint != '_')
+			throw("Parse failure: invalid literal");
 	}
 
 	return(result);
