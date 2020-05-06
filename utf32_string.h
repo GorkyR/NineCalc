@@ -304,7 +304,7 @@ convert_f64_to_string(Memory_Arena *arena, f64 value)
 	}
 	else
 	{
-		return (integral_string);
+		return(integral_string);
 	}
 
 	UTF32_String decimal_string = {};
@@ -445,9 +445,14 @@ parse_float(UTF32_String text)
 
 	if (has_decimal)
 	{
-		f64 pow_ten = 10;
-		for (u64 i = decimal_offset + 2; i < text.length; ++i)
-			pow_ten *= 10;
+		f64 pow_ten = 1;
+		for (u64 i = decimal_offset + 1; i < text.length; ++i)
+		{
+			if (text[i] >= '0' && text[i] <= '9')
+				pow_ten *= 10;
+			else if (text[i] != '_')
+				throw("Parse failure: invalid literal");
+		}
 		result += parse_integer(substring(text, decimal_offset + 1)) / pow_ten;
 	}
 

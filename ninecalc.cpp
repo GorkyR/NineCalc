@@ -610,19 +610,5 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Time_
 	draw_text(canvas, &state->font, info_str,
 		canvas->width - info_width, canvas->height - max_height - state->font.line_height + state->font.baseline,
 		colorf32(1, 0, 0));
-
-	persistent UTF32_String label1 = make_string_from_chars(arena, "min i: ");
-	info_str = concatenate(&temp, label1, convert_s64_to_string(&temp, (s64)min));
-	info_width = get_text_width(&state->font, info_str);
-	draw_text(canvas, &state->font, info_str,
-		canvas->width - info_width, canvas->height - max_height - state->font.line_height * 3 + state->font.baseline,
-		colorf32(1, 0, 0));
-
-	persistent UTF32_String label2 = make_string_from_chars(arena, "max i: ");
-	info_str = concatenate(&temp, label2, convert_s64_to_string(&temp, (s64)max));
-	info_width = get_text_width(&state->font, info_str);
-	draw_text(canvas, &state->font, info_str,
-		canvas->width - info_width, canvas->height - max_height - state->font.line_height * 2 + state->font.baseline,
-		colorf32(1, 0, 0));
 #endif
 }
