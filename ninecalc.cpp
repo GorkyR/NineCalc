@@ -3,13 +3,13 @@
 /*
 	@TODO:
 	- Calculator
-	  	- Functions (?)
+	  - Functions (?)
 
 	- Editor
 	  - Token highlighting
 	  - Token formating (?)
 	
-	  - Select & Copy
+	  - Select & Copy/Cut
 
 	  - Save .txt (with results (?)) (?)
 	  - Scrollbar (?)
@@ -428,8 +428,6 @@ process_keyboard(State *state, Keyboard_Input *keyboard)
 			(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line);
 		state->cursor_position_in_line += keyboard->input_buffer.length;
 		keyboard->input_buffer.length = 0;
-		//insert_character_if_fits(&state->document.buffer, character,
-		//				(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line++);
 		recalculate_lines(&state->document);
 		should_snap_scroll = true;
 	}
@@ -459,7 +457,6 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Time_
 
 		keyboard->input_buffer = make_empty_string(arena, 256);
 	}
-
 
 	bool32 should_snap_scroll = process_keyboard(state, keyboard);
 	if (should_snap_scroll)
@@ -576,7 +573,7 @@ update_and_render(Memory_Arena *arena, Platform *platform, Canvas *canvas, Time_
 	{
 		u64 it = (fps_history_index + i) % array_count(fps_history);
 		s64 fps_i = fps_history[it];
-		fps_i /= 2;
+		// fps_i /= 2;
 		max_height = (s32)maximum(max_height, fps_i);
 		draw_rect(canvas,
 			(s32)(bar_width * i      ), canvas->height - (s32)fps_i,

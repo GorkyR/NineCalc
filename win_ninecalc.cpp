@@ -20,6 +20,7 @@ global Mouse_Input    mouse;
 global Keyboard_Input keyboard;
 global Time_Input     time;
 
+
 internal Memory_Arena
 win_allocate_memory(u64 size, u64 base = 0)
 {
@@ -106,6 +107,13 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 	LRESULT result = 0;
 	switch (message)
 	{
+		case WM_ACTIVATE:
+		{
+			// if (wparam == WA_INACTIVE)
+			// 	KillTimer(window, 1);
+			// else 
+			// 	SetTimer(window, 1, (u32)target_milliseconds_per_frame, 0);
+		} break;
 		case WM_CLOSE:
 		case WM_QUIT:
 		case WM_DESTROY:
@@ -384,8 +392,6 @@ ticks_per_second()
 	return(result.QuadPart);
 }
 
-global s64 ticks_per_microsecond = 0;
-
 internal inline s64
 current_tick()
 {
@@ -397,6 +403,7 @@ current_tick()
 internal inline s64
 microseconds_elapsed(s64 start, s64 end)
 {
+	persistent s64 ticks_per_microsecond = ticks_per_second() / 1000000;
 	s64 microseconds = (end - start) / ticks_per_microsecond;
 	return(microseconds);
 }
@@ -406,6 +413,17 @@ microseconds_elapsed_since(s64 start)
 {
 	s64 microseconds = microseconds_elapsed(start, current_tick());
 	return(microseconds);
+}
+
+internal inline s64
+win_monitor_refresh_rate(HWND window)
+{
+	HDC dc = GetDC(window);
+	s64 refresh_rate = GetDeviceCaps(dc, VREFRESH);
+	if (refresh_rate <= 1)
+		refresh_rate = 30;
+	ReleaseDC(window, dc);
+	return refresh_rate;
 }
 
 int
@@ -441,26 +459,25 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 		if (window)
 		{
 			Platform win_platform = {};
-			win_platform.load_font         = win_load_font;
-			win_platform.push_to_clipboard = win_push_to_clipboard;
+			win_platform.load_font          = win_load_font;
+			win_platform.push_to_clipboard  = win_push_to_clipboard;
 			win_platform.pop_from_clipboard = win_pop_from_clipboard;
 
-			ticks_per_microsecond = ticks_per_second() / 1000000;
+			// s64 target_frame_rate = win_monitor_refresh_rate(window);
+			s64 target_frame_rate = 30;
+			s64 target_microseconds_per_frame = 1000000 / target_frame_rate;
+			s64 target_milliseconds_per_frame = 1000 / target_frame_rate;
+
 			s64 start_timestamp = current_tick();
 			s64 timestamp = start_timestamp;
+			s64 delta_microseconds = 1;
 
-			while (application_is_running)
+			MSG message;
+			// while (PeekMessage(&message, window, 0, 0, PM_REMOVE))
+			while (application_is_running && GetMessage(&message, window, 0, 0))
 			{
-				MSG message;
-				while (PeekMessage(&message, window, 0, 0, PM_REMOVE))
-				{
-					TranslateMessage(&message);
-					DispatchMessage(&message);
-				}
-
-				s64 end_timestamp = current_tick();
-				s64 delta_microseconds = microseconds_elapsed(timestamp, end_timestamp);
-				timestamp = end_timestamp;
+				TranslateMessage(&message);
+				DispatchMessage(&message);
 
 				time = {};
 				time.elapsed = microseconds_elapsed(start_timestamp, timestamp),
@@ -469,6 +486,15 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 				update_and_render(&memory, &win_platform, &win_graphics.canvas, &time, &keyboard, &mouse);
 				reset_keyboard_input(&keyboard);
 				reset_mouse_input(&mouse);
+
+				delta_microseconds = microseconds_elapsed_since(timestamp);
+				while (delta_microseconds < target_microseconds_per_frame)
+				{
+					s64 sleep_milliseconds = (target_microseconds_per_frame - delta_microseconds) / 1000;
+					Sleep((u32)sleep_milliseconds);
+					delta_microseconds = microseconds_elapsed_since(timestamp);
+				}
+				timestamp = current_tick();
 
 				win_update_window(window, &win_graphics);
 			}
