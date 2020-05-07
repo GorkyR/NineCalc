@@ -458,6 +458,8 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 
 		if (window)
 		{
+			timeBeginPeriod(1);
+
 			Platform win_platform = {};
 			win_platform.load_font          = win_load_font;
 			win_platform.push_to_clipboard  = win_push_to_clipboard;
@@ -472,20 +474,29 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 			s64 timestamp = start_timestamp;
 			s64 delta_microseconds = 1;
 
-			MSG message;
-			// while (PeekMessage(&message, window, 0, 0, PM_REMOVE))
-			while (application_is_running && GetMessage(&message, window, 0, 0))
+			while (application_is_running)
 			{
-				TranslateMessage(&message);
-				DispatchMessage(&message);
+				bool32 received_input = false;
 
-				time = {};
-				time.elapsed = microseconds_elapsed(start_timestamp, timestamp),
-				time.delta   = delta_microseconds;
+				MSG message;
+				while (PeekMessage(&message, window, 0, 0, PM_REMOVE))
+				// while (application_is_running && GetMessage(&message, window, 0, 0))
+				{
+					received_input = true;
+					TranslateMessage(&message);
+					DispatchMessage(&message);
+				}
 
-				update_and_render(&memory, &win_platform, &win_graphics.canvas, &time, &keyboard, &mouse);
-				reset_keyboard_input(&keyboard);
-				reset_mouse_input(&mouse);
+				if (received_input)
+				{
+					time = {};
+					time.elapsed = microseconds_elapsed(start_timestamp, timestamp),
+					time.delta   = delta_microseconds;
+
+					update_and_render(&memory, &win_platform, &win_graphics.canvas, &time, &keyboard, &mouse);
+					reset_keyboard_input(&keyboard);
+					reset_mouse_input(&mouse);
+				}
 
 				delta_microseconds = microseconds_elapsed_since(timestamp);
 				while (delta_microseconds < target_microseconds_per_frame)
@@ -496,7 +507,7 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 				}
 				timestamp = current_tick();
 
-				win_update_window(window, &win_graphics);
+				if (received_input) win_update_window(window, &win_graphics);
 			}
 		}
 	}
