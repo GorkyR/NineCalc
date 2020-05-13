@@ -22,7 +22,7 @@ struct UTF32_String_List
 UTF32_String make_empty_string(Memory_Arena *memory, u64 capacity);
 UTF32_String make_string_from_chars(Memory_Arena *memory, char *text);
 
-bool32 strings_are_equal(UTF32_String str1, UTF32_String str2);
+bool strings_are_equal(UTF32_String str1, UTF32_String str2);
 
 UTF32_String substring(UTF32_String text, u64 offset, u64 size);
 UTF32_String substring(UTF32_String text, u64 offset);
@@ -30,14 +30,14 @@ UTF32_String substring(UTF32_String text, u64 offset);
 UTF32_String_List split_lines(Memory_Arena *memory, UTF32_String text);
 
 UTF32_String convert_s64_to_string(Memory_Arena *arena, s64 value);
-UTF32_String convert_s64_to_string(Memory_Arena *arena, s64 value, bool32 negative);
+UTF32_String convert_s64_to_string(Memory_Arena *arena, s64 value, bool negative);
 UTF32_String convert_f64_to_string(Memory_Arena *arena, f64 value);
 s64 parse_integer(UTF32_String text);
 f64 parse_float(UTF32_String text);
 
 void reverse_string_in_place(UTF32_String text);
-bool32 insert_character_if_fits(UTF32_String *into, u32 character, u64 at);
-bool32 insert_string_if_fits(UTF32_String *into, UTF32_String other, u64 at);
+bool insert_character_if_fits(UTF32_String *into, u32 character, u64 at);
+bool insert_string_if_fits(UTF32_String *into, UTF32_String other, u64 at);
 UTF32_String concatenate(Memory_Arena *arena, UTF32_String a, UTF32_String b);
 void remove_from_string(UTF32_String *from, u64 at, u64 count);
 
@@ -47,14 +47,14 @@ u32 &
 UTF32_String::operator[](u64 index)
 {
 	assert(index < this->capacity);
-	return(this->data[index]);
+	return this->data[index];
 }
 
 UTF32_String &
 UTF32_String_List::operator[](u64 index)
 {
 	assert(index < this->count);
-	return(this->data[index]);
+	return this->data[index];
 }
 
 UTF32_String
@@ -64,7 +64,7 @@ make_empty_string(Memory_Arena *memory, u64 capacity)
 	string.data = allocate_array(memory, u32, capacity);
 	string.capacity = capacity;
 	string.length = 0;
-	return(string);
+	return string;
 }
 
 UTF32_String
@@ -83,7 +83,7 @@ make_string_from_chars(Memory_Arena *memory, char *text)
 		string.data[i] = (u32)text[i];
 	}
 
-	return(string);
+	return string;
 }
 
 UTF32_String
@@ -94,7 +94,7 @@ substring(UTF32_String text, u64 offset, u64 size)
 	substring.data = text.data + offset;
 	substring.length = size;
 	substring.capacity = text.capacity - offset;
-	return(substring);
+	return substring;
 }
 
 UTF32_String
@@ -105,7 +105,7 @@ substring(UTF32_String text, u64 offset)
 	substring.data = text.data + offset;
 	substring.length = text.length - offset;
 	substring.capacity = text.capacity - offset;
-	return(substring);
+	return substring;
 }
 
 UTF32_String_List
@@ -129,13 +129,13 @@ split_lines(Memory_Arena *arena, UTF32_String text)
 		}
 	}
 
-	return(substrings);
+	return substrings;
 }
 
-bool32
+bool
 strings_are_equal(UTF32_String str1, UTF32_String str2)
 {
-	bool32 are_equal = false;
+	bool are_equal = false;
 	if (str1.length == str2.length)
 	{
 		are_equal = true;
@@ -148,7 +148,7 @@ strings_are_equal(UTF32_String str1, UTF32_String str2)
 			}
 		}
 	}
-	return(are_equal);
+	return are_equal;
 }
 
 void
@@ -161,7 +161,7 @@ reverse_string_in_place(UTF32_String text)
 }
 
 UTF32_String
-convert_s64_to_string(Memory_Arena *arena, s64 value, bool32 negative)
+convert_s64_to_string(Memory_Arena *arena, s64 value, bool negative)
 {
 	UTF32_String result = {};
 	result.data = (u32*)((u8*)arena->data + arena->used);
@@ -181,14 +181,14 @@ convert_s64_to_string(Memory_Arena *arena, s64 value, bool32 negative)
 
 	reverse_string_in_place(result);
 
-	return(result);
+	return result;
 }
 
 UTF32_String
 convert_s64_to_string(Memory_Arena *arena, s64 value)
 {
-	bool32 is_negative = value < 0;
-	return(convert_s64_to_string(arena, is_negative? -value : value, is_negative));
+	bool is_negative = value < 0;
+	return convert_s64_to_string(arena, is_negative? -value : value, is_negative);
 }
 
 internal s16
@@ -278,7 +278,7 @@ normalize_f64(f64 *value)
 	    }
 	}
 
-	return(exponent);
+	return exponent;
 }
 
 UTF32_String
@@ -287,7 +287,7 @@ convert_f64_to_string(Memory_Arena *arena, f64 value)
 	UTF32_String result = {};
 	result.data = (u32*)((u8*)arena->data + arena->used);
 
-	bool32 was_negative = value < 0;
+	bool was_negative = value < 0;
 	if (was_negative) value = -value;
 
 	s16 exponent = normalize_f64(&value);
@@ -304,7 +304,7 @@ convert_f64_to_string(Memory_Arena *arena, f64 value)
 	}
 	else
 	{
-		return(integral_string);
+		return integral_string;
 	}
 
 	UTF32_String decimal_string = {};
@@ -334,7 +334,7 @@ convert_f64_to_string(Memory_Arena *arena, f64 value)
 
 	result.length = result.capacity = (u32*)((u8*)arena->data + arena->used) - result.data;
 
-	return(result);
+	return result;
 }
 
 UTF32_String
@@ -346,10 +346,10 @@ concatenate(Memory_Arena *arena, UTF32_String a, UTF32_String b)
 		concatenation[i] = a[i];
 	for (u64 i = 0; i < b.length; i++)
 		concatenation[i + a.length] = b[i];
-	return(concatenation);
+	return concatenation;
 }
 
-bool32
+bool
 insert_character_if_fits(UTF32_String *into, u32 character, u64 at)
 {
 	if (into->capacity > into->length + 1)
@@ -365,12 +365,12 @@ insert_character_if_fits(UTF32_String *into, u32 character, u64 at)
 		(*into)[at] = character;
 
 		into->length += 1;
-		return(true);
+		return true;
 	}
-	return(false);
+	return false;
 }
 
-bool32
+bool
 insert_string_if_fits(UTF32_String *into, UTF32_String other, u64 at)
 {
 	if (into->capacity > (into->length + other.length))
@@ -389,9 +389,9 @@ insert_string_if_fits(UTF32_String *into, UTF32_String other, u64 at)
 		}
 
 		into->length += other.length;
-		return(true);
+		return true;
 	}
-	return(false);
+	return false;
 }
 
 void
@@ -423,7 +423,7 @@ parse_integer(UTF32_String text)
 			throw("Parse failure: invalid literal");
 	}
 
-	return(result);
+	return result;
 }
 
 f64
@@ -431,7 +431,7 @@ parse_float(UTF32_String text)
 {
 	assert(text[0] != '-');
 	u64 decimal_offset = 0;
-	bool32 has_decimal = false;
+	bool has_decimal = false;
 	for (; decimal_offset < text.length; ++decimal_offset)
 	{
 		if (text[decimal_offset] == '.')
@@ -456,5 +456,5 @@ parse_float(UTF32_String text)
 		result += parse_integer(substring(text, decimal_offset + 1)) / pow_ten;
 	}
 
-	return(result);
+	return result;
 }

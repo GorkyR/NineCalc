@@ -4,100 +4,138 @@
 #include <windows.h>
 #include <stdio.h>
 
-struct WIN_Graphics
+struct Windows_Graphics
 {
 	BITMAPINFO bitmap_info;
 	u8  bytes_per_pixel;
 	Canvas canvas;
 };
 
-global bool32 application_is_running  = true;
+         int     WinMain(HINSTANCE, HINSTANCE, LPSTR, int);
+internal LRESULT win_callback(HWND, UINT, WPARAM, LPARAM);
 
-global WIN_Graphics win_graphics;
+internal u8*  win_allocate(u64, void* =0);
+internal void win_free    (void*);
 
-global State          *state;
-global Mouse_Input    mouse;
-global Keyboard_Input keyboard;
-global Time_Input     time;
+internal void win_resize_backbuffer(Windows_Graphics *, u32, u32);
+internal void win_update_window(HWND, HDC, Windows_Graphics*);
+internal void win_update_window(HWND, Windows_Graphics*);
 
+internal Memory_Arena win_allocate_arena(u64, void* =0);
+internal void         win_free_arena    (Memory_Arena*);
 
-internal Memory_Arena
-win_allocate_memory(u64 size, u64 base = 0)
+internal u8* win_read_file(char*);
+
+internal inline s64 win_monitor_refresh_rate(HWND);
+
+internal inline s64 win_ticks_per_second();
+internal inline s64 win_tick();
+internal inline s64 win_microseconds_elapsed (s64, s64);
+internal inline s64 win_microseconds_elapsed_since(s64);
+
+internal inline void update_button(Input_Button*, bool, bool =false);
+internal inline void reset_button        (Input_Button*);
+internal inline void reset_keyboard_input(Keyboard_Input*);
+internal inline void reset_mouse_input   (Mouse_Input*);
+
+internal Platform_Load_Font          win_load_font;
+internal Platform_Unload_Font        win_unload_font;
+internal Platform_Push_To_Clipboard  win_push_to_clipboard;
+internal Platform_Pop_From_Clipboard win_pop_from_clipboard;
+
+//-------------------------------------------------------------------
+
+global bool             application_is_running;
+global Windows_Graphics win_graphics;
+global Memory_Arena     arena;
+global State            *state;
+global Platform         win_platform;
+global Time_Input       time;
+global Keyboard_Input   keyboard;
+global Mouse_Input      mouse;
+
+global s64 start_timestamp;
+global s64 timestamp;
+
+int
+WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 {
-	Memory_Arena memory = {};
-	memory.data = (u8*)VirtualAlloc((LPVOID)base, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-	if (memory.data)
+	start_timestamp = win_tick();
+
+	#ifdef DEBUG
+		u64 memory_base = tebibytes(2);
+	#else
+		u64 memory_base = 0;
+	#endif
+
+	arena = win_allocate_arena(mebibytes(5), (void*)memory_base);
+	state = (State*)arena.data;
+
+	win_platform.load_font          = win_load_font;
+	win_platform.push_to_clipboard  = win_push_to_clipboard;
+	win_platform.pop_from_clipboard = win_pop_from_clipboard;
+	
+	WNDCLASSEX window_class = {};
+	window_class.cbSize = sizeof(window_class);
+	window_class.lpfnWndProc = win_callback;
+	window_class.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+	window_class.hInstance = instance;
+	window_class.hIcon = 0;
+	window_class.hCursor = LoadCursor(0, IDC_IBEAM);
+	window_class.lpszClassName = "NineCalcClass";
+
+	if (RegisterClassEx(&window_class))
 	{
-		memory.size = size;
-	}
-	return(memory);
-}
-internal void
-win_free_memory(Memory_Arena *memory)
-{
-	VirtualFree(memory->data, 0, MEM_RELEASE);
-	*memory = {};
-}
+		HWND window = CreateWindowEx(WS_EX_APPWINDOW, window_class.lpszClassName,
+			/*window title:*/ "NineCalc",
+			/*styles:*/ WS_OVERLAPPEDWINDOW | WS_VISIBLE /*| WS_VSCROLL/**/,
+			/*position:*/ CW_USEDEFAULT, CW_USEDEFAULT,
+			/*size:*/ 480, 360,
+			0, 0, instance, 0);
 
-internal void
-win_resize_backbuffer(WIN_Graphics *graphics, u32 width, u32 height)
-{
-	if (graphics->canvas.buffer)
-	{
-		VirtualFree(graphics->canvas.buffer, 0, MEM_RELEASE);
-	}
+		if (window)
+		{
+			timeBeginPeriod(1);
 
-	graphics->bytes_per_pixel = 4;
-	graphics->canvas.width  = width;
-	graphics->canvas.height = height;
+			// s64 target_frame_rate = win_monitor_refresh_rate(window);
+			s64 target_frame_rate = 30;
+			s64 target_microseconds_per_frame = 1000000 / target_frame_rate;
+			s64 target_milliseconds_per_frame = 1000 / target_frame_rate;
 
-	BITMAPINFOHEADER header = {};
-	header.biSize 		 = sizeof(header);
-	header.biWidth 		 = width;
-	header.biHeight 	 = -(s64)height;
-	header.biPlanes 	 = 1;
-	header.biBitCount 	 = graphics->bytes_per_pixel * 8;
-	header.biCompression = BI_RGB;
-	graphics->bitmap_info.bmiHeader = header;
+			timestamp = start_timestamp;
+			s64 delta_microseconds = 0;
 
-	u32 size = width * height * graphics->bytes_per_pixel;
-	graphics->canvas.buffer = (u32*)VirtualAlloc(0, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-}
+			application_is_running = true;
 
-internal void
-win_update_window(HWND window, HDC device_context, WIN_Graphics *graphics)
-{
-	RECT client_rect;
-	GetClientRect(window, &client_rect);
-	u32 dest_width  = client_rect.right - client_rect.left;
-	u32 dest_height = client_rect.bottom - client_rect.top;
-	StretchDIBits(device_context,
-		/*destination x, y, w, h:*/ 0, 0, dest_width, dest_height,
-		/*source x, y, w, h:*/      0, 0, graphics->canvas.width, graphics->canvas.height,
-		graphics->canvas.buffer, &graphics->bitmap_info,
-		DIB_RGB_COLORS, SRCCOPY);
-}
+			MSG message;
+			while (application_is_running && GetMessage(&message, window, 0, 0))
+			{
+				do
+				{
+					TranslateMessage(&message);
+					DispatchMessage(&message);
+				} while (PeekMessage(&message, window, 0, 0, PM_REMOVE));
 
-internal void
-win_update_window(HWND window, WIN_Graphics *graphics)
-{
-	HDC device_context = GetDC(window);
-	win_update_window(window, device_context, graphics);
-	ReleaseDC(window, device_context);
-}
+				time = {};
+				time.elapsed = win_microseconds_elapsed(start_timestamp, timestamp),
+				time.delta   = delta_microseconds;
 
-internal void
-win_update_button(Input_Button *button, bool is_down, bool32 repeat_key = false)
-{
-	if (button->is_down != is_down)
-	{
-		++button->transitions;
-		button->is_down = is_down;
-	}
-	// repeat key counts as another press
-	else if (repeat_key && button->is_down && is_down)
-	{
-		button->transitions += 2;
+				update_and_render(&arena, &win_platform, &win_graphics.canvas, &time, &keyboard, &mouse);
+				reset_keyboard_input(&keyboard);
+				reset_mouse_input(&mouse);
+
+				delta_microseconds = win_microseconds_elapsed_since(timestamp);
+				while (delta_microseconds < target_microseconds_per_frame)
+				{
+					s64 sleep_milliseconds = (target_microseconds_per_frame - delta_microseconds) / 1000;
+					Sleep((u32)sleep_milliseconds);
+					delta_microseconds = win_microseconds_elapsed_since(timestamp);
+				}
+				timestamp = win_tick();
+
+				win_update_window(window, &win_graphics);
+			}
+		}
 	}
 }
 
@@ -128,13 +166,20 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			u32 height = client_rect.bottom - client_rect.top;
 			win_resize_backbuffer(&win_graphics, width, height);
 		} break;
-		/*case WM_PAINT:
+		case WM_PAINT:
 		{
 			PAINTSTRUCT paint;
 			HDC device_context = BeginPaint(window, &paint);
+
+			s64 new_timestamp = win_tick();
+			time.elapsed = win_microseconds_elapsed(start_timestamp, new_timestamp);
+			time.delta   = win_microseconds_elapsed(timestamp, new_timestamp);
+			timestamp = new_timestamp;
+			update_and_render(&arena, &win_platform, &win_graphics.canvas, &time, &keyboard, &mouse);
+
 			win_update_window(window, device_context, &win_graphics);
 			EndPaint(window, &paint);
-		} break;*/
+		} break;
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 		{
@@ -146,20 +191,20 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			if (wparam == VK_CONTROL)
 				control_key_is_down = key_is_down;
 
-			else if (wparam == VK_UP)     win_update_button(&keyboard.up       , key_is_down, true);
-			else if (wparam == VK_RIGHT)  win_update_button(&keyboard.right    , key_is_down, true);
-			else if (wparam == VK_DOWN)   win_update_button(&keyboard.down     , key_is_down, true);
-			else if (wparam == VK_LEFT)   win_update_button(&keyboard.left     , key_is_down, true);
-			else if (wparam == VK_RETURN) win_update_button(&keyboard.enter    , key_is_down, true);
-			else if (wparam == VK_BACK)   win_update_button(&keyboard.backspace, key_is_down, true);
-			else if (wparam == VK_DELETE) win_update_button(&keyboard.del      , key_is_down, true);
-			else if (wparam == VK_HOME)   win_update_button(&keyboard.home     , key_is_down, true);
-			else if (wparam == VK_END)    win_update_button(&keyboard.end      , key_is_down, true);
+			else if (wparam == VK_UP)     update_button(&keyboard.up       , key_is_down, true);
+			else if (wparam == VK_RIGHT)  update_button(&keyboard.right    , key_is_down, true);
+			else if (wparam == VK_DOWN)   update_button(&keyboard.down     , key_is_down, true);
+			else if (wparam == VK_LEFT)   update_button(&keyboard.left     , key_is_down, true);
+			else if (wparam == VK_RETURN) update_button(&keyboard.enter    , key_is_down, true);
+			else if (wparam == VK_BACK)   update_button(&keyboard.backspace, key_is_down, true);
+			else if (wparam == VK_DELETE) update_button(&keyboard.del      , key_is_down, true);
+			else if (wparam == VK_HOME)   update_button(&keyboard.home     , key_is_down, true);
+			else if (wparam == VK_END)    update_button(&keyboard.end      , key_is_down, true);
 
-			else if (wparam == 'X') win_update_button(&keyboard.cut  , key_is_down && control_key_is_down);
-			else if (wparam == 'C') win_update_button(&keyboard.copy , key_is_down && control_key_is_down);
-			else if (wparam == 'V') win_update_button(&keyboard.paste, key_is_down && control_key_is_down);
-			else if (wparam == 'S') win_update_button(&keyboard.save , key_is_down && control_key_is_down);
+			else if (wparam == 'X') update_button(&keyboard.cut  , key_is_down && control_key_is_down);
+			else if (wparam == 'C') update_button(&keyboard.copy , key_is_down && control_key_is_down);
+			else if (wparam == 'V') update_button(&keyboard.paste, key_is_down && control_key_is_down);
+			else if (wparam == 'S') update_button(&keyboard.save , key_is_down && control_key_is_down);
 		} break;
 		case WM_UNICHAR:
 		case WM_CHAR:
@@ -167,7 +212,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			if (wparam == UNICODE_NOCHAR)
 				result = true;
 			u32 character = (u32)wparam;
-			if (codepoint_is_in_range(state->font, character))
+			if (codepoint_is_in_font(state->font, character))
 				insert_character_if_fits(&keyboard.input_buffer, character, keyboard.input_buffer.length);
 		} break;
 		case WM_MOUSEMOVE:
@@ -181,9 +226,9 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			mouse.x = (s16)(lparam & 0xffff);
 			mouse.y = (s16)((lparam >> 16) & 0xffff);
 
-			win_update_button(&mouse.left  , wparam & MK_LBUTTON);
-			win_update_button(&mouse.right , wparam & MK_RBUTTON);
-			win_update_button(&mouse.middle, wparam & MK_MBUTTON);
+			update_button(&mouse.left  , wparam & MK_LBUTTON);
+			update_button(&mouse.right , wparam & MK_RBUTTON);
+			update_button(&mouse.middle, wparam & MK_MBUTTON);
 		} break;
 		case WM_MOUSEWHEEL:
 		{
@@ -197,7 +242,84 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			result = DefWindowProc(window, message, wparam, lparam);
 		} break;
 	}
-	return(result);
+	return result;
+}
+
+internal u8 *
+win_allocate(u64 size, void *base)
+{
+	u8 *data = (u8*)VirtualAlloc((LPVOID)base, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	return data;
+}
+
+internal void
+win_free(void *buffer)
+{
+	VirtualFree(buffer, 0, MEM_RELEASE);
+}
+
+internal void
+win_resize_backbuffer(Windows_Graphics *graphics, u32 width, u32 height)
+{
+	if (graphics->canvas.buffer)
+		win_free(graphics->canvas.buffer);
+
+	graphics->bytes_per_pixel = 4;
+	graphics->canvas.width  = width;
+	graphics->canvas.height = height;
+
+	BITMAPINFOHEADER header = {};
+	header.biSize 		 = sizeof(header);
+	header.biWidth 		 = width;
+	header.biHeight 	 = -(s64)height;
+	header.biPlanes 	 = 1;
+	header.biBitCount 	 = graphics->bytes_per_pixel * 8;
+	header.biCompression = BI_RGB;
+	graphics->bitmap_info.bmiHeader = header;
+
+	u32 size = width * height * graphics->bytes_per_pixel;
+	graphics->canvas.buffer = (u32*)win_allocate(size);
+}
+
+internal void
+win_update_window(HWND window, HDC device_context, Windows_Graphics *graphics)
+{
+	RECT client_rect;
+	GetClientRect(window, &client_rect);
+	u32 dest_width  = client_rect.right - client_rect.left;
+	u32 dest_height = client_rect.bottom - client_rect.top;
+	StretchDIBits(device_context,
+		/*destination x, y, w, h:*/ 0, 0, dest_width, dest_height,
+		/*source x, y, w, h:*/      0, 0, graphics->canvas.width, graphics->canvas.height,
+		graphics->canvas.buffer, &graphics->bitmap_info,
+		DIB_RGB_COLORS, SRCCOPY);
+}
+
+internal void
+win_update_window(HWND window, Windows_Graphics *graphics)
+{
+	HDC device_context = GetDC(window);
+	win_update_window(window, device_context, graphics);
+	ReleaseDC(window, device_context);
+}
+
+internal Memory_Arena
+win_allocate_arena(u64 size, void *base)
+{
+	Memory_Arena newly_allocated_arena = {};
+	newly_allocated_arena.data = win_allocate(size, base);
+	if (newly_allocated_arena.data)
+	{
+		newly_allocated_arena.size = size;
+	}
+	return newly_allocated_arena;
+}
+
+internal void
+win_free_arena(Memory_Arena *memory_arena)
+{
+	win_free((void*)memory_arena->data);
+	*memory_arena = {};
 }
 
 internal u8 *
@@ -211,8 +333,7 @@ win_read_file(char *file_path)
 	  0, OPEN_EXISTING, 0, 0);
 
 	u32 file_size = GetFileSize(file, 0);
-	buffer = VirtualAlloc(0, file_size,
-		MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	buffer = win_allocate(file_size);
 
 	u32 bytes_read;	
 	if (!ReadFile(file, buffer, file_size, (LPDWORD)&bytes_read, 0))
@@ -222,17 +343,11 @@ win_read_file(char *file_path)
 
 	CloseHandle(file);
 
-	return((u8*)buffer);
+	return (u8*)buffer;
 }
 
-internal void
-win_free_file(u8 *buffer)
-{
-	VirtualFree((void *)buffer, 0, MEM_RELEASE);
-}
-
-Font 
-win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
+internal Font 
+win_load_font(/*Memory_Arena *memory_arena,*/ char *ttf_filepath, u32 line_height)
 {
 	Font loaded_font = {};
 	// init line_height
@@ -254,7 +369,8 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 	{ // init ranges
 		u32 ranges[][2] = { {32, 126} };
 		loaded_font.range_count = array_count(ranges);
-		loaded_font.ranges = (u32 (*)[2])allocate_bytes(memory, sizeof(ranges));
+		// loaded_font.ranges = (u32 (*)[2])allocate_bytes(memory_arena, sizeof(ranges));
+		loaded_font.ranges = (u32 (*)[2])win_allocate(sizeof(ranges));
 		for (u32 i = 0; i < sizeof(ranges) / 4; i++)
 		{
 			*((u32*)loaded_font.ranges + i) = ranges[0][i];
@@ -262,13 +378,13 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 	}
 
 	{ // init glyphs
-		u32 n_glyphs = 0;
 		for (u32 i = 0; i < loaded_font.range_count; i++)
 		{
 			u32 *range = loaded_font.ranges[i];
-			n_glyphs += range[1] - range[0] + 1;
+			loaded_font.glyph_count += range[1] - range[0] + 1;
 		}
-		loaded_font.glyphs = allocate_array(memory, Glyph, n_glyphs);
+		// loaded_font.glyphs = allocate_array(memory_arena, Glyph, loaded_font.glyph_count);
+		loaded_font.glyphs = (Glyph *)win_allocate(sizeof(Glyph) * loaded_font.glyph_count);
 	}
 
 	u32 current_glyph = 0;
@@ -293,32 +409,45 @@ win_load_font(Memory_Arena *memory, char *ttf_filepath, u32 line_height)
 				glyph->advance = (u32)((f32)advance * scale);
 			}
 
-			glyph->buffer = (u8*)allocate_bytes(memory, glyph->width * glyph->height);
+			{
+				// glyph->buffer = allocate_bytes(memory_arena, glyph->width * glyph->height);
+				glyph->buffer = win_allocate(glyph->width * glyph->height);
 
-			stbtt_MakeGlyphBitmap(&font, glyph->buffer,
-				glyph->width, glyph->height,
-				/*stride:*/glyph->width,
-				scale, scale,
-				glyph_index);
+				stbtt_MakeGlyphBitmap(&font, glyph->buffer,
+					glyph->width, glyph->height,
+					/*stride:*/glyph->width,
+					scale, scale,
+					glyph_index);
+			}
 		}
 	}
 
-	win_free_file(font_data);
+	win_free(font_data);
 
-	return(loaded_font);
+	return loaded_font;
 }
 
-bool32
+internal void
+win_unload_font(Font *font)
+{
+	for (u64 i = 0; i < font->glyph_count; ++i)
+		win_free(font->glyphs[i].buffer);
+	win_free(font->glyphs);
+	win_free(font->ranges);
+	*font = {};
+}
+
+internal bool
 win_push_to_clipboard(UTF32_String text)
 {
 	if (!OpenClipboard(0))
-		return(false);
+		return false;
 	EmptyClipboard();
 	HGLOBAL global_handle = GlobalAlloc(GMEM_MOVEABLE, text.length + 1);
 	if (!global_handle)
 	{
 		CloseClipboard();
-		return(false);
+		return false;
 	}
 	LPTSTR copied_string = (LPTSTR)GlobalLock(global_handle);
 	for (u64 i = 0; i < text.length; ++i)
@@ -327,11 +456,11 @@ win_push_to_clipboard(UTF32_String text)
 	GlobalUnlock(global_handle);
 	SetClipboardData(CF_TEXT, global_handle);
 	CloseClipboard();
-	return(true);
+	return true;
 }
 
-UTF32_String
-win_pop_from_clipboard(Memory_Arena *arena)
+internal UTF32_String
+win_pop_from_clipboard()
 {
 	UTF32_String result = {};
 	if (OpenClipboard(0))
@@ -342,13 +471,77 @@ win_pop_from_clipboard(Memory_Arena *arena)
 			LPTSTR clipboard_string = (LPTSTR)GlobalLock(global_handle);
 			if (clipboard_string)
 			{
-				result = make_string_from_chars(arena, clipboard_string);
+				// result = make_string_from_chars(memory_arena, clipboard_string);
+				{
+					u64 length = 0;
+					while (clipboard_string[length])
+						++length;
+					result.data = (u32 *)win_allocate(sizeof(u32) * length);
+					result.capacity = result.length = length;
+					for (u64 i = 0; i < length; ++i)
+						result.data[i] = clipboard_string[i];
+				}
 				GlobalUnlock(global_handle);
 			}
 		}
 		CloseClipboard();
 	}
-	return(result);
+	return result;
+}
+
+internal inline s64
+win_monitor_refresh_rate(HWND window)
+{
+	HDC dc = GetDC(window);
+	s64 refresh_rate = GetDeviceCaps(dc, VREFRESH);
+	if (refresh_rate <= 1)
+		refresh_rate = 30;
+	ReleaseDC(window, dc);
+	return refresh_rate;
+}
+
+internal inline s64
+win_ticks_per_second()
+{
+	LARGE_INTEGER result;
+	QueryPerformanceFrequency(&result);
+	return result.QuadPart;
+}
+
+internal inline s64
+win_tick()
+{
+	LARGE_INTEGER result;
+	QueryPerformanceCounter(&result);
+	return result.QuadPart;
+}
+
+internal inline s64
+win_microseconds_elapsed(s64 start, s64 end)
+{
+	persistent s64 ticks_per_microsecond = win_ticks_per_second() / 1000000;
+	s64 microseconds = (end - start) / ticks_per_microsecond;
+	return microseconds;
+}
+
+internal inline s64
+win_microseconds_elapsed_since(s64 start)
+{
+	s64 microseconds = win_microseconds_elapsed(start, win_tick());
+	return microseconds;
+}
+
+
+internal inline void
+update_button(Input_Button *button, bool is_down, bool repeat_key)
+{
+	if (button->is_down != is_down)
+	{
+		++button->transitions;
+		button->is_down = is_down;
+	}
+	else if (repeat_key && button->is_down && is_down)
+		button->transitions += 2;
 }
 
 internal inline void
@@ -382,133 +575,4 @@ reset_mouse_input(Mouse_Input *input)
 	reset_button(&input->left);
 	reset_button(&input->right);
 	reset_button(&input->middle);
-}
-
-internal inline s64
-ticks_per_second()
-{
-	LARGE_INTEGER result;
-	QueryPerformanceFrequency(&result);
-	return(result.QuadPart);
-}
-
-internal inline s64
-current_tick()
-{
-	LARGE_INTEGER result;
-	QueryPerformanceCounter(&result);
-	return(result.QuadPart);
-}
-
-internal inline s64
-microseconds_elapsed(s64 start, s64 end)
-{
-	persistent s64 ticks_per_microsecond = ticks_per_second() / 1000000;
-	s64 microseconds = (end - start) / ticks_per_microsecond;
-	return(microseconds);
-}
-
-internal inline s64
-microseconds_elapsed_since(s64 start)
-{
-	s64 microseconds = microseconds_elapsed(start, current_tick());
-	return(microseconds);
-}
-
-internal inline s64
-win_monitor_refresh_rate(HWND window)
-{
-	HDC dc = GetDC(window);
-	s64 refresh_rate = GetDeviceCaps(dc, VREFRESH);
-	if (refresh_rate <= 1)
-		refresh_rate = 30;
-	ReleaseDC(window, dc);
-	return refresh_rate;
-}
-
-int
-WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
-{
-	#ifdef DEBUG
-		u64 memory_base = tebibytes(2);
-	#else
-		u64 memory_base = 0;
-	#endif
-
-	Memory_Arena memory = win_allocate_memory(mebibytes(5), memory_base);
-	state = (State*)memory.data;
-
-	WNDCLASSEX window_class = {};
-	window_class.cbSize = sizeof(window_class);
-	window_class.lpfnWndProc = win_callback;
-	window_class.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-	window_class.hInstance = instance;
-	window_class.hIcon = 0;
-	window_class.hCursor = LoadCursor(0, IDC_IBEAM);
-	window_class.lpszClassName = "NineCalcClass";
-
-	if (RegisterClassEx(&window_class))
-	{
-		HWND window = CreateWindowEx(WS_EX_APPWINDOW, window_class.lpszClassName,
-			/*window title:*/ "NineCalc",
-			/*styles:*/ WS_OVERLAPPEDWINDOW | WS_VISIBLE /*| WS_VSCROLL/**/,
-			/*position:*/ CW_USEDEFAULT, CW_USEDEFAULT,
-			/*size:*/ 480, 360,
-			0, 0, instance, 0);
-
-		if (window)
-		{
-			timeBeginPeriod(1);
-
-			Platform win_platform = {};
-			win_platform.load_font          = win_load_font;
-			win_platform.push_to_clipboard  = win_push_to_clipboard;
-			win_platform.pop_from_clipboard = win_pop_from_clipboard;
-
-			// s64 target_frame_rate = win_monitor_refresh_rate(window);
-			s64 target_frame_rate = 30;
-			s64 target_microseconds_per_frame = 1000000 / target_frame_rate;
-			s64 target_milliseconds_per_frame = 1000 / target_frame_rate;
-
-			s64 start_timestamp = current_tick();
-			s64 timestamp = start_timestamp;
-			s64 delta_microseconds = 1;
-
-			while (application_is_running)
-			{
-				bool32 received_input = false;
-
-				MSG message;
-				while (PeekMessage(&message, window, 0, 0, PM_REMOVE))
-				// while (application_is_running && GetMessage(&message, window, 0, 0))
-				{
-					received_input = true;
-					TranslateMessage(&message);
-					DispatchMessage(&message);
-				}
-
-				if (received_input)
-				{
-					time = {};
-					time.elapsed = microseconds_elapsed(start_timestamp, timestamp),
-					time.delta   = delta_microseconds;
-
-					update_and_render(&memory, &win_platform, &win_graphics.canvas, &time, &keyboard, &mouse);
-					reset_keyboard_input(&keyboard);
-					reset_mouse_input(&mouse);
-				}
-
-				delta_microseconds = microseconds_elapsed_since(timestamp);
-				while (delta_microseconds < target_microseconds_per_frame)
-				{
-					s64 sleep_milliseconds = (target_microseconds_per_frame - delta_microseconds) / 1000;
-					Sleep((u32)sleep_milliseconds);
-					delta_microseconds = microseconds_elapsed_since(timestamp);
-				}
-				timestamp = current_tick();
-
-				if (received_input) win_update_window(window, &win_graphics);
-			}
-		}
-	}
 }

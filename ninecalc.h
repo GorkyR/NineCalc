@@ -18,10 +18,11 @@ struct Font
 	u32 line_height;
 	u32 baseline;
 
-	u32 range_count;
 	u32 (*ranges)[2];
+	u32 range_count;
 
 	Glyph *glyphs;
+	u32 glyph_count;
 };
 
 struct Document
@@ -58,7 +59,7 @@ struct Canvas
 struct Input_Button
 {
 	bool is_down;
-	u32 transitions;
+	u32  transitions;
 };
 
 struct Keyboard_Input
@@ -98,15 +99,42 @@ struct Time_Input
 	s64 delta;
 };
 
-typedef Font Platform_Load_Font(Memory_Arena*, char*, u32);
-typedef bool32 Platform_Push_To_Clipboard(UTF32_String);
-typedef UTF32_String Platform_Pop_From_Clipboard(Memory_Arena*);
+typedef Font Platform_Load_Font(char*, u32);
+typedef void Platform_Unload_Font(Font*);
+typedef bool Platform_Push_To_Clipboard(UTF32_String);
+typedef UTF32_String Platform_Pop_From_Clipboard();
 
 struct Platform
 {
 	Platform_Load_Font          *load_font;
+	Platform_Unload_Font        *unload_font;
 	Platform_Push_To_Clipboard  *push_to_clipboard;
 	Platform_Pop_From_Clipboard *pop_from_clipboard;
 };
 
 internal void update_and_render(Memory_Arena*, Platform*, Canvas*, Time_Input*, Keyboard_Input*, Mouse_Input*);
+
+internal inline u32 coloru8 (u8 red,  u8 green,  u8 blue,  u8 alpha=255);
+internal inline u32 coloru8 (u8 luminosity,  u8 alpha=255);
+internal inline u32 colorf32(f32 red, f32 green, f32 blue, f32 alpha=1.0f);
+internal inline u32 colorf32(f32 luminosity, f32 alpha=1.0f);
+
+internal inline u32 alpha_blend(u32 source, u32 destination);
+
+internal Glyph * glyph_from_codepoint(Font, u32 codepoint);
+internal bool    codepoint_is_in_font(Font, u32);
+
+internal void draw_rect  (Canvas, s32 minx, s32 miny, s32 maxx, s32 maxy, u32 color);
+internal s32  draw_glyph (Canvas, Glyph, s32 x, s32 baseline, u32 color);
+internal s32  draw_glyph (Canvas, Font, u32 codepoint, s32 x, s32 baseline, u32 color);
+internal s32  draw_text  (Canvas, Font, UTF32_String, s32 x, s32 baseline, u32 color);
+internal void draw_bitmap(Canvas, u32* bitmap, s32 x, s32 y, u32 width, u32 height);
+
+internal s32 text_width(UTF32_String, Font, u64=0, s32* =0);
+internal u64 cursor_position_from_offset(UTF32_String, s32, Font);
+
+internal void recalculate_lines(Document*);
+internal void recalculate_scroll(State*, Canvas);
+
+internal inline bool button_was_pressed(Input_Button);
+internal inline bool process_keyboard(State*, Keyboard_Input*);
