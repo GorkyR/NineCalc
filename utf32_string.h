@@ -23,6 +23,7 @@ UTF32_String make_empty_string(Memory_Arena *memory, u64 capacity);
 UTF32_String make_string_from_chars(Memory_Arena *memory, char *text);
 
 bool strings_are_equal(UTF32_String str1, UTF32_String str2);
+bool strings_are_equal(char* str1, UTF32_String str2);
 
 UTF32_String substring(UTF32_String text, u64 offset, u64 size);
 UTF32_String substring(UTF32_String text, u64 offset);
@@ -149,6 +150,24 @@ strings_are_equal(UTF32_String str1, UTF32_String str2)
 		}
 	}
 	return are_equal;
+}
+
+bool
+strings_are_equal(char *str1, UTF32_String str2)
+{
+	bool are_equal = true;
+	u64 i = 0;
+	for (;i < str2.length; i++)
+	{
+		if (!str1[i] || str1[i] != (char)str2[i])
+		{
+			are_equal = false;
+			break;
+		}
+	}
+	if (str1[i])
+		are_equal = false;
+ 	return are_equal;
 }
 
 void

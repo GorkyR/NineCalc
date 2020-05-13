@@ -3,10 +3,10 @@
 /*
 	@TODO:
 	- Calculator
-	  - Functions
 	  - Big numbers
 
 	- Editor
+	  - Animate caret
 	  - Select & Copy/Cut
 	  - Token highlighting
 

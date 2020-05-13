@@ -4,3 +4,4 @@ run.bat
 test.cmd
 test_math_evaluation.cpp
 debug.cmd
+run_tests.cmd 
