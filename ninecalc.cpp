@@ -69,6 +69,11 @@ update_and_render(Memory_Arena   *arena,
 		recalculate_cursor_position(state);
 	}
 
+	if (button_was_pressed(keyboard->save))
+	{
+		platform->push_to_clipboard(state->document.buffer);
+	}
+
 	s32 horizontal_offset = state->line_number_bar_width;
 
 	// background
@@ -141,14 +146,18 @@ update_and_render(Memory_Arena   *arena,
 			(i == state->cursor_line)? coloru8(0, 200) : coloru8(0, 128));
 
 	    // line content
-		draw_text(*canvas, state->font, line, horizontal_offset, baseline, coloru8(0));
+	    u32 text_color = coloru8(0);
+		if (keyboard->save.is_down)
+			text_color = coloru8(100, 100, 255, 200);
+		draw_text(*canvas, state->font, line, horizontal_offset, baseline, text_color);
 
 #if DEBUG && 0
 		UTF32_String line_length = convert_s64_to_string(&temp, line.length);
 		s32 width = text_width(line_length, state->font);
 		draw_text(*canvas, state->font, line_length, canvas->width - width, baseline, coloru8(255, 0, 0));
 #else
-		Result evaluation = evaluate_expression(&temp, line, &context);
+		Token_List tokens = tokenize_expression(&temp, line);
+		Result evaluation = evaluate_tree(parse_tokens(&temp, tokens), &context);
 		if (evaluation.valid)
 		{
 			UTF32_String result = convert_f64_to_string(&temp, evaluation.value);
@@ -157,7 +166,7 @@ update_and_render(Memory_Arena   *arena,
 			if (i == state->cursor_line)
 			{
 				if (keyboard->copy.is_down)
-					result_color = coloru8(100, 100, 255, 200);
+					result_color = coloru8(100, 100, 255, 255);
 				if (button_was_pressed(keyboard->copy))
 					platform->push_to_clipboard(result);
 			}
@@ -166,7 +175,21 @@ update_and_render(Memory_Arena   *arena,
 			draw_text(*canvas, state->font, result, canvas->width - result_width, baseline, result_color);
 
 			add_or_update_variable(&context, prev_var, evaluation.value);
-			add_or_update_variable(&context, sum_var, context[sum_var].value + evaluation.value);
+
+			bool used_sum = false;
+			for (u64 j = 0; j < tokens.count; ++j)
+			{
+				Token token = tokens[j];
+				if (token.type == Token_Type::Identifier && strings_are_equal(token.text, sum_var))
+				{
+					used_sum = true;
+					break;
+				}
+			}
+			if (used_sum)
+				add_or_update_variable(&context, sum_var, 0);
+			else
+				add_or_update_variable(&context, sum_var, context[sum_var].value + evaluation.value);
 		}
 #endif
 	}
@@ -548,6 +571,7 @@ process_keyboard(State *state, Keyboard_Input *keyboard)
 	bool should_snap_scroll = false;
 	if (button_was_pressed(keyboard->up))
 	{
+		state->selecting = false;
 		if (state->cursor_line > 0)
 		{
 			--state->cursor_line;
@@ -559,6 +583,7 @@ process_keyboard(State *state, Keyboard_Input *keyboard)
 	}
 	if (button_was_pressed(keyboard->down))
 	{
+		state->selecting = false;
 		if ((state->cursor_line + 1) < state->document.line_count)
 		{
 			++state->cursor_line;
@@ -570,6 +595,7 @@ process_keyboard(State *state, Keyboard_Input *keyboard)
 	}
 	if (button_was_pressed(keyboard->right))
 	{
+		state->selecting = false;
 		if (state->cursor_position_in_line == state->document.lines[state->cursor_line].length)
 		{
 			if ((state->cursor_line + 1) < state->document.line_count)
@@ -586,6 +612,7 @@ process_keyboard(State *state, Keyboard_Input *keyboard)
 	}
 	if (button_was_pressed(keyboard->left))
 	{
+		state->selecting = false;
 		if (state->cursor_position_in_line == 0)
 		{
 			if (state->cursor_line != 0)

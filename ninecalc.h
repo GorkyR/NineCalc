@@ -46,6 +46,14 @@ struct State
 	u64 cursor_line;
 	u64 cursor_position_in_line;
 
+	bool selecting;
+
+	u64 selection_start_line;
+	u64 selection_start_position_in_line;
+
+	u64 selection_end_line;
+	u64 selection_end_position_in_line;
+
 	u64 scroll_offset;
 };
 
@@ -68,6 +76,11 @@ struct Keyboard_Input
 	Input_Button right;
 	Input_Button down;
 	Input_Button left;
+
+	Input_Button select_up;
+	Input_Button select_right;
+	Input_Button select_down;
+	Input_Button select_left;
 
 	Input_Button enter;
 	Input_Button backspace;

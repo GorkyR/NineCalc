@@ -184,17 +184,44 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 		case WM_KEYUP:
 		{
 			persistent bool control_key_is_down = false;
+			persistent bool shift_key_is_down = false;
 
 			bool key_was_down = (lparam & (1 << 30)) != 0;
 			bool key_is_down  = (lparam & (1 << 31)) == 0;
 
-			if (wparam == VK_CONTROL)
+			if (wparam == VK_SHIFT)
+				shift_key_is_down = key_is_down;
+			else if (wparam == VK_CONTROL)
 				control_key_is_down = key_is_down;
 
-			else if (wparam == VK_UP)     update_button(&keyboard.up       , key_is_down, true);
-			else if (wparam == VK_RIGHT)  update_button(&keyboard.right    , key_is_down, true);
-			else if (wparam == VK_DOWN)   update_button(&keyboard.down     , key_is_down, true);
-			else if (wparam == VK_LEFT)   update_button(&keyboard.left     , key_is_down, true);
+			else if (wparam == VK_UP)
+			{
+				if (shift_key_is_down)
+					update_button(&keyboard.select_up, key_is_down, true);
+				else
+					update_button(&keyboard.up, key_is_down, true);
+			}
+			else if (wparam == VK_RIGHT)
+			{
+				if (shift_key_is_down)
+					update_button(&keyboard.select_right, key_is_down, true);
+				else
+					update_button(&keyboard.right, key_is_down, true);
+			}
+			else if (wparam == VK_DOWN)
+			{
+				if (shift_key_is_down)
+					update_button(&keyboard.select_down, key_is_down, true);
+				else
+					update_button(&keyboard.down, key_is_down, true);
+			}
+			else if (wparam == VK_LEFT)
+			{
+				if (shift_key_is_down)
+					update_button(&keyboard.select_left, key_is_down, true);
+				else
+					update_button(&keyboard.left, key_is_down, true);
+			}
 			else if (wparam == VK_RETURN) update_button(&keyboard.enter    , key_is_down, true);
 			else if (wparam == VK_BACK)   update_button(&keyboard.backspace, key_is_down, true);
 			else if (wparam == VK_DELETE) update_button(&keyboard.del      , key_is_down, true);
