@@ -3,6 +3,7 @@
 /*
 	@TODO:
 	- Calculator
+	  - Units -> Unit conversion
 	  - Big numbers
 
 	- Editor
@@ -51,11 +52,21 @@ update_and_render(Memory_Arena   *arena,
 	if (button_was_pressed(keyboard->paste))
 	{
 		UTF32_String pasted = platform->pop_from_clipboard();
+		u64 length_of_pasted_string = pasted.length;
+		u64 c = 0;
+		for (u64 i = 0; i < pasted.length; ++i)
+		{
+			u32 codepoint = pasted[i];
+			if (codepoint == '\n' || codepoint_is_in_font(state->font, codepoint))
+				pasted[c++] = codepoint;
+		}
+		pasted.length = c;
 		insert_string_if_fits(&state->document.buffer, pasted,
 			(state->document.lines[state->cursor_line].data - state->document.buffer.data) + state->cursor_position_in_line);
-		state->cursor_position_in_line += pasted.length;
-		arena->used -= pasted.length * sizeof(u32);
+		arena->used -= length_of_pasted_string * sizeof(u32);
 		recalculate_lines(&state->document);
+		state->cursor_position_in_line += pasted.length;
+		recalculate_cursor_position(state);
 	}
 
 	s32 horizontal_offset = state->line_number_bar_width;
@@ -73,6 +84,14 @@ update_and_render(Memory_Arena   *arena,
 	// @TODO: clamp to visible area
 	u64 min = state->scroll_offset / state->font.line_height;
 	u64 max = minimum(min + canvas->height / state->font.line_height + 1, state->document.line_count);
+
+	for (u64 i = 0; i < min; ++i)
+	{
+		Result evaluation = evaluate_expression(&temp, state->document.lines[i], &context);
+		add_or_update_variable(&context, prev_var, evaluation.value);
+		add_or_update_variable(&context, sum_var, context[sum_var].value + evaluation.value);
+	}
+	
 	for (u64 i = min; i < max; i++)
 	{
 		UTF32_String line = state->document.lines[i];
@@ -124,6 +143,11 @@ update_and_render(Memory_Arena   *arena,
 	    // line content
 		draw_text(*canvas, state->font, line, horizontal_offset, baseline, coloru8(0));
 
+#if DEBUG && 0
+		UTF32_String line_length = convert_s64_to_string(&temp, line.length);
+		s32 width = text_width(line_length, state->font);
+		draw_text(*canvas, state->font, line_length, canvas->width - width, baseline, coloru8(255, 0, 0));
+#else
 		Result evaluation = evaluate_expression(&temp, line, &context);
 		if (evaluation.valid)
 		{
@@ -144,6 +168,7 @@ update_and_render(Memory_Arena   *arena,
 			add_or_update_variable(&context, prev_var, evaluation.value);
 			add_or_update_variable(&context, sum_var, context[sum_var].value + evaluation.value);
 		}
+#endif
 	}
 
 #if DEBUG
@@ -183,7 +208,11 @@ update_and_render(Memory_Arena   *arena,
 
 	persistent UTF32_String apprx_str = make_string_from_chars(arena, "~");
 	persistent UTF32_String unit_str  = make_string_from_chars(arena, " f/s");
+	persistent UTF32_String label2 = make_string_from_chars(arena, "cursor_line: ");
+	persistent UTF32_String label1 = make_string_from_chars(arena, "cursor_position: ");
 	UTF32_String fps_string = convert_s64_to_string(&temp, fps);
+	UTF32_String cursor_line_str = convert_s64_to_string(&temp, (s64)state->cursor_line);
+	UTF32_String cursor_position_str = convert_s64_to_string(&temp, (s64)state->cursor_position_in_line);
 
 	UTF32_String info_str = concatenate(&temp, apprx_str, concatenate(&temp, fps_string, unit_str));
 
@@ -191,6 +220,21 @@ update_and_render(Memory_Arena   *arena,
 	draw_text(*canvas, state->font, info_str,
 		canvas->width - info_width, canvas->height - (s32)fps - state->font.line_height + state->font.baseline,
 		colorf32(1, 0, 0));
+
+	info_str = concatenate(&temp, label1, cursor_position_str);
+
+	info_width = text_width(info_str, state->font);
+	draw_text(*canvas, state->font, info_str,
+		canvas->width - info_width, canvas->height - (s32)fps - state->font.line_height*3 + state->font.baseline,
+		colorf32(1, 0, 0));
+
+	info_str = concatenate(&temp, label2, cursor_line_str);
+
+	info_width = text_width(info_str, state->font);
+	draw_text(*canvas, state->font, info_str,
+		canvas->width - info_width, canvas->height - (s32)fps - state->font.line_height*2 + state->font.baseline,
+		colorf32(1, 0, 0));
+
 #endif
 }
 
@@ -459,6 +503,22 @@ recalculate_scroll(State *state, Canvas canvas)
 		state->scroll_offset = scroll_into_cursor;
 	else if ((scroll_into_cursor + state->font.line_height) >= state->scroll_offset + height)
 		state->scroll_offset = scroll_into_cursor + state->font.line_height - height;
+}
+
+internal void
+recalculate_cursor_position(State *state)
+{
+	while (state->cursor_line < state->document.line_count)
+	{
+		UTF32_String line = state->document.lines[state->cursor_line];
+		if (state->cursor_position_in_line > line.length)
+		{
+			state->cursor_position_in_line -= line.length + 1;
+			++state->cursor_line;
+		}
+		else
+			break;
+	}
 }
 
 internal u64

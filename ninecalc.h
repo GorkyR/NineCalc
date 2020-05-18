@@ -135,6 +135,7 @@ internal u64 cursor_position_from_offset(UTF32_String, s32, Font);
 
 internal void recalculate_lines(Document*);
 internal void recalculate_scroll(State*, Canvas);
+internal void recalculate_cursor_position(State*);
 
 internal inline bool button_was_pressed(Input_Button);
 internal inline bool process_keyboard(State*, Keyboard_Input*);
