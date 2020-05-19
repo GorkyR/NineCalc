@@ -199,15 +199,21 @@ AST *parse_tokens(Memory_Arena *arena, Token_List tokens, Token_Type expression_
 			node = make_operator_node(arena, token, left_node,
 				parse_tokens(arena, tokens_from(tokens, left_node->consumed + 1)));
 			// rotate tree to comply with order of operations
-			if (node->right->token.type == Token_Type::Operator &&
-				node->right->precedence <= node->precedence)
+			if (node->right->token.type == Token_Type::Operator && node->right->precedence <= node->precedence)
 			{
-				u32 consumed = node->consumed;
-				AST *node_right_left = node->right->left;
-				node->right->left = node;
-				node = node->right;
-				node->left->right = node_right_left;
-				node->consumed = consumed;
+				AST *root_node = node->right;
+				root_node->consumed = node->consumed;
+
+				AST *parent_node = node->right;
+				while (true) {
+					node->right = node->right->left;
+					if (node->right->token.type == Token_Type::Operator && node->right->precedence <= node->precedence)
+						parent_node = node->right;
+					else
+						break;
+				}
+				parent_node->left = node;
+				node = root_node;
 			}
 		}
 		else if (!is_end_of_expression(token, expression_type))

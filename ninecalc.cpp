@@ -33,7 +33,12 @@ update_and_render(Memory_Arena   *arena,
 		allocate_struct(arena, State);
 		allocate_bytes(arena, temp.size);
 
-		state->font = platform->load_font("data/fira.ttf", 18);
+#ifdef DEBUG
+	#define FONT_PATH "data/"
+#else
+	#define FONT_PATH
+#endif
+		state->font = platform->load_font(FONT_PATH "fira.ttf", 18);
 		state->caret_width = 1;
 		state->line_number_bar_width = 40;
 

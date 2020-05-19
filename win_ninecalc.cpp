@@ -4,6 +4,14 @@
 #include <windows.h>
 #include <stdio.h>
 
+#define STR_INNER(x) #x
+#define STR(x) STR_INNER(x)
+
+#ifdef DEBUG
+	#define VERSION_STRING "Version: " STR(VERSION) "-dev"
+#else
+    #define VERSION_STRING "Version: " STR(VERSION)
+#endif
 struct Windows_Graphics
 {
 	BITMAPINFO bitmap_info;
@@ -76,13 +84,13 @@ WinMain (HINSTANCE instance, HINSTANCE _, LPSTR command_line, int __)
 	win_platform.pop_from_clipboard = win_pop_from_clipboard;
 	
 	WNDCLASSEX window_class = {};
-	window_class.cbSize = sizeof(window_class);
-	window_class.lpfnWndProc = win_callback;
-	window_class.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-	window_class.hInstance = instance;
-	window_class.hIcon = 0;
-	window_class.hCursor = LoadCursor(0, IDC_IBEAM);
-	window_class.lpszClassName = "NineCalcClass";
+	window_class.cbSize        = sizeof(window_class);
+	window_class.lpfnWndProc   = win_callback;
+	window_class.style         = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+	window_class.hInstance     = instance;
+	window_class.hIcon         = 0;
+	window_class.hCursor       = LoadCursor(0, IDC_IBEAM);
+	window_class.lpszClassName = "NineCalcWindowClass";
 
 	if (RegisterClassEx(&window_class))
 	{
@@ -232,6 +240,14 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			else if (wparam == 'C') update_button(&keyboard.copy , key_is_down && control_key_is_down);
 			else if (wparam == 'V') update_button(&keyboard.paste, key_is_down && control_key_is_down);
 			else if (wparam == 'S') update_button(&keyboard.save , key_is_down && control_key_is_down);
+
+			else if (wparam == VK_F1)
+			{
+				MessageBox(window,
+					"A text-based calculator by Gorky Rojas.\n" VERSION_STRING,
+					"About NineCalc",
+					MB_ICONINFORMATION | MB_OK);
+			}
 		} break;
 		case WM_UNICHAR:
 		case WM_CHAR:
