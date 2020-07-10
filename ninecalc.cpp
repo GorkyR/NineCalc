@@ -62,7 +62,7 @@ update_and_render(Memory_Arena   *arena,
 		for (u64 i = 0; i < pasted.length; ++i)
 		{
 			u32 codepoint = pasted[i];
-			if (codepoint == '\n' || (codepoint != ' ' && codepoint_is_in_font(state->font, codepoint)))
+			if (codepoint == '\n' || codepoint_is_in_font(state->font, codepoint))
 				pasted[c++] = codepoint;
 		}
 		pasted.length = c;
@@ -124,7 +124,14 @@ update_and_render(Memory_Arena   *arena,
 					colorf32(0.85f));
 			}
 
-
+			// caret
+			s32 caret_offset = 0;
+			text_width(line, state->font, state->cursor_position_in_line, &caret_offset);
+			caret_offset += horizontal_offset;
+			draw_rect(*canvas,
+				caret_offset, vertical_offset,
+				caret_offset + state->caret_width, vertical_offset + state->font.line_height,
+				coloru8(0));
 		}
 
 		if (mouse->left.is_down)
@@ -154,52 +161,36 @@ update_and_render(Memory_Arena   *arena,
 		s32 width = text_width(line_length, state->font);
 		draw_text(*canvas, state->font, line_length, canvas->width - width, baseline, coloru8(255, 0, 0));
 #else
-		const u32 NUMBERS     = coloru8(100, 25, 25);
-		const u32 OPERATORS   = coloru8(25, 25, 50);
-		const u32 PARENTHESIS = coloru8(0, 0, 0, 100);
-		const u32 IDENTIFIER  = coloru8(25, 50, 25);
-		const u32 INVALID     = coloru8(0, 0, 0, 50);
+		const u32 NUMBERS_COLOR     = coloru8(50, 50, 150);
+		const u32 OPERATORS_COLOR   = coloru8(150, 25, 25);
+		const u32 PARENTHESIS_COLOR = coloru8(0, 0, 0, 150);
+		const u32 IDENTIFIER_COLOR  = coloru8(50, 100, 50);
+		const u32 INVALID_COLOR     = coloru8(0, 0, 0, 100);
 
 		Token_List tokens = tokenize_expression(&temp, line);
 
 		s32 offset = horizontal_offset;
-		s64 token_cursor_position = state->cursor_position_in_line;
-		bool printed_caret = false;
+		u64 index = 0;
 
 		for (u64 j = 0; j < tokens.count; j++)
 		{
 			Token token = tokens[j];
+			if (token.text.data == 0)
+				break;
 			u32 token_color = (token.type == Token_Type::Number
-				? NUMBERS
+				? NUMBERS_COLOR
 				: (token.type == Token_Type::Operator
-				? OPERATORS
+				? OPERATORS_COLOR
 				: (token.type == Token_Type::Parenthesis
-				? PARENTHESIS
+				? PARENTHESIS_COLOR
 				: (token.type == Token_Type::Identifier
-				? IDENTIFIER
-					: INVALID))));
+				? IDENTIFIER_COLOR
+					: INVALID_COLOR))));
 
-			s32 spacing = 5;
-			s32 leading_space = (token.type == Token_Type::Operator? spacing : 0);
-			s32 trailing_space = (leading_space || token.type == Token_Type::Separator? spacing : 0);
-			offset += leading_space;
-			if (i == state->cursor_line && !printed_caret) {
-				//caret
-				if (token_cursor_position <= (s64)token.text.length) {
-					s32 caret_offset;
-					text_width(token.text, state->font, token_cursor_position, &caret_offset);
-					caret_offset += offset;
-					draw_rect(*canvas,
-						caret_offset, vertical_offset,
-						caret_offset + state->caret_width, vertical_offset + state->font.line_height,
-						coloru8(0));
-					printed_caret = true;
-				} else {
-					token_cursor_position -= token.text.length;
-				}
-			}
-			offset += draw_text(*canvas, state->font, token.text, offset, baseline, token_color) + trailing_space;
-
+			u64 token_index = &token.text.data[0] - &line.data[0];
+			offset += draw_text(*canvas, state->font, substring(line, index, token_index - index), offset, baseline, INVALID_COLOR);
+			offset += draw_text(*canvas, state->font, token.text, offset, baseline, token_color);
+			index = token_index + token.text.length;
 		}
 
 		Result evaluation = evaluate_tree(parse_tokens(&temp, tokens), &context);
