@@ -116,6 +116,11 @@ internal Result factorial(f64);
 internal Math_Function exponentiation;
 internal Math_Function square_root;
 internal Math_Function absolute_value;
+internal Math_Function rounding;
+internal Math_Function flooring;
+internal Math_Function ceiling;
+internal Math_Function minimum;
+internal Math_Function maximum;
 
 internal Token_List
 tokenize_expression(Memory_Arena *arena, UTF32_String input)
@@ -226,8 +231,8 @@ AST *parse_tokens(Memory_Arena *arena, Token_List tokens, Token_Type expression_
 	return node;
 }
 
-char* function_names[]     = { "pow", "sqrt", "abs" };
-Math_Function *functions[] = { exponentiation, square_root, absolute_value };
+char* function_names[]     = { "pow", "sqrt", "abs", "floor", "ceil", "round", "min", "max" };
+Math_Function *functions[] = { exponentiation, square_root, absolute_value, flooring, ceiling, rounding, minimum, maximum };
 
 internal Result
 evaluate_tree(AST *tree, Context *context)
@@ -655,6 +660,70 @@ absolute_value(f64* parameters, u32 parameter_count)
 		result = { true, abs(parameters[0]) };
 	return result;
 }
+
+internal Result
+rounding(f64* parameters, u32 parameter_count)
+{
+	Result result = {};
+	if (parameter_count == 1)
+		result = { true, round(parameters[0]) };
+	if (parameter_count == 2)
+		result = { true, round(parameters[0] / parameters[1]) * parameters[1] };
+	return result;
+}
+
+internal Result
+flooring(f64* parameters, u32 parameter_count)
+{
+	Result result = {};
+	if (parameter_count == 1)
+		result = { true, floor(parameters[0]) };
+	if (parameter_count == 2)
+		result = { true, floor(parameters[0] / parameters[1]) * parameters[1] };
+	return result;
+}
+
+internal Result
+ceiling(f64* parameters, u32 parameter_count)
+{
+	Result result = {};
+	if (parameter_count == 1)
+		result = { true, ceil(parameters[0]) };
+	if (parameter_count == 2)
+		result = { true, ceil(parameters[0] / parameters[1]) * parameters[1] };
+	return result;
+}
+
+internal Result
+minimum(f64* parameters, u32 parameter_count)
+{
+	Result result = {};
+	if (parameter_count == 2)
+		result = { true, parameters[0] > parameters[1]? parameters[1] : parameters[0] };
+	else if (parameter_count > 2)
+	{
+		result = { true, parameters[0] };
+		for (u32 i = 1; i < parameter_count; i++)
+			result.value = result.value > parameters[i]? parameters[i] : result.value;
+	}
+	return result;
+}
+
+internal Result
+maximum(f64* parameters, u32 parameter_count)
+{
+	Result result = {};
+	if (parameter_count == 2)
+		result = { true, parameters[0] < parameters[1]? parameters[1] : parameters[0] };
+	else if (parameter_count > 2)
+	{
+		result = { true, parameters[0] };
+		for (u32 i = 1; i < parameter_count; i++)
+			result.value = result.value < parameters[i]? parameters[i] : result.value;
+	}
+	return result;
+}
+
 
 void add_or_update_variable(Context *context, UTF32_String variable, f64 value)
 {

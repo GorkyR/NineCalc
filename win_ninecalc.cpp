@@ -255,7 +255,7 @@ win_callback (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 			if (wparam == UNICODE_NOCHAR)
 				result = true;
 			u32 character = (u32)wparam;
-			if (codepoint_is_in_font(state->font, character))
+			if (character != ' ' && codepoint_is_in_font(state->font, character))
 				insert_character_if_fits(&keyboard.input_buffer, character, keyboard.input_buffer.length);
 		} break;
 		case WM_MOUSEMOVE:
