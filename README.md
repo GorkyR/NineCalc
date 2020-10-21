@@ -1,5 +1,5 @@
 # NineCalc
-A calculator app
+A text-buffer based calculator app
 
 ___
 
