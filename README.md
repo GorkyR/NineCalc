@@ -3,7 +3,7 @@ A calculator app
 
 ___
 
-"Who decided that desktop calculator programs are supposde to to simulate pocket calculators?", "What's the point of UI number input when I have a keyboard?", "Why can't I just quickly type an expression into a buffer and see the answer immediately?"  If you've ever thought something along these lines, then maybe this is the app for you!
+"Who decided that desktop calculator programs are supposed to simulate pocket calculators?", "What's the point of UI number input when I have a keyboard?", "Why can't I just quickly type an expression into a buffer and see the answer immediately?"  If you've ever thought something along these lines, then maybe this is the app for you!
 
 ___
 
